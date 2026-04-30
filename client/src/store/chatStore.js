@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { chatAPI, messageAPI } from '@/lib/api';
+import { chatAPI, messageAPI, userAPI } from '@/lib/api';
 
 export const useChatStore = create((set, get) => ({
   chats: [],
@@ -335,7 +335,7 @@ export const useChatStore = create((set, get) => ({
 
   fetchUsers: async (params) => {
     try {
-      const response = await chatAPI.getUsers(params);
+      const response = await userAPI.getUsers(params);
       set({ users: response.data.data.users });
     } catch (error) {
       console.error('Failed to fetch users:', error);
