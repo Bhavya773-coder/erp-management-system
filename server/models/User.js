@@ -15,6 +15,13 @@ const userSchema = new mongoose.Schema({
   avatarUrl: { type: String },
   isOnline: { type: Boolean, default: false },
   lastSeen: { type: Date, default: Date.now },
+  pushSubscriptions: [{
+    endpoint: String,
+    keys: {
+      p256dh: String,
+      auth: String
+    }
+  }],
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });

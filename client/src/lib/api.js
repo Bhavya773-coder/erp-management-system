@@ -45,6 +45,7 @@ const userAPI = {
   getUser: (id) => api.get(`/users/${id}`),
   getProfile: () => api.get('/users/profile/me'),
   updateProfile: (data) => api.put('/users/profile', data),
+  subscribeToPush: (subscription) => api.post('/users/subscribe', subscription),
   updateUserRole: (id, role) => api.put(`/users/${id}/role`, { role }),
   deleteUser: (id) => api.delete(`/users/${id}`),
 };

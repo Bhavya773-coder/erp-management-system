@@ -1,6 +1,7 @@
 import User from '../models/User.js';
 import Chat from '../models/Chat.js';
 import Message from '../models/Message.js';
+import { sendPushNotification } from '../services/pushService.js';
 
 // Store connected users: { userId: socketId }
 const connectedUsers = new Map();
@@ -121,7 +122,7 @@ export const setupSocketHandlers = (io) => {
 
         // Update chat updatedAt
         const updatedChat = await Chat.findByIdAndUpdate(chatId, { updatedAt: Date.now() }, { new: true })
-          .populate('members.user', 'name email avatarUrl isOnline lastSeen phone education skills role');
+          .populate('members.user', 'name email avatarUrl isOnline lastSeen phone education skills role pushSubscriptions');
 
         // Prepare full chat object for sidebar sync
         const validMembers = updatedChat.members.filter(m => m.user);
@@ -158,6 +159,18 @@ export const setupSocketHandlers = (io) => {
           io.to(`user:${userId}`).emit('chat:updated', {
             chat: formattedChat
           });
+          
+          // Send push notification to other users
+          if (userId !== socket.userId) {
+            const pushPayload = {
+              title: `New Message from ${formattedMessage.sender.name}`,
+              body: formattedMessage.messageType === 'FILE' ? `File: ${formattedMessage.fileName}` :
+                    formattedMessage.messageType === 'IMAGE' ? 'Image' :
+                    formattedMessage.content || 'New Message',
+              url: `/chat`
+            };
+            sendPushNotification(member.user, pushPayload).catch(err => console.error(err));
+          }
         });
 
         console.log(`📨 Message sent in chat ${chatId} by ${socket.userId}`);

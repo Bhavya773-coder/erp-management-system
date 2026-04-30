@@ -56,6 +56,53 @@ export default function Chat() {
     syncProfile();
   }, []);
 
+  // Web Push Subscription
+  useEffect(() => {
+    const urlBase64ToUint8Array = (base64String) => {
+      const padding = '='.repeat((4 - base64String.length % 4) % 4);
+      const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+      const rawData = window.atob(base64);
+      const outputArray = new Uint8Array(rawData.length);
+      for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+      }
+      return outputArray;
+    };
+
+    const subscribePush = async () => {
+      if ('serviceWorker' in navigator && 'PushManager' in window) {
+        try {
+          const registration = await navigator.serviceWorker.ready;
+          const publicVapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+          if (!publicVapidKey) return;
+          
+          let subscription = await registration.pushManager.getSubscription();
+          
+          if (!subscription) {
+            subscription = await registration.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
+            });
+          }
+          
+          await userAPI.subscribeToPush(subscription);
+        } catch (error) {
+          console.error('Error subscribing to push notifications:', error);
+        }
+      }
+    };
+    
+    if (Notification.permission === 'default') {
+      Notification.requestPermission().then(permission => {
+        if (permission === 'granted') {
+          subscribePush();
+        }
+      });
+    } else if (Notification.permission === 'granted') {
+      subscribePush();
+    }
+  }, []);
+
   const syncProfile = async () => {
     try {
       const response = await userAPI.getProfile();

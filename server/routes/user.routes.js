@@ -6,6 +6,52 @@ import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
 
+// @route   POST /api/users/subscribe
+// @desc    Subscribe to push notifications
+// @access  Private
+router.post('/subscribe', authenticate, async (req, res) => {
+  try {
+    const subscription = req.body;
+    
+    // Validate subscription object
+    if (!subscription || !subscription.endpoint) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid subscription object'
+      });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    
+    // Check if subscription already exists to prevent duplicates
+    const subscriptionExists = user.pushSubscriptions?.some(
+      sub => sub.endpoint === subscription.endpoint
+    );
+
+    if (!subscriptionExists) {
+      if (!user.pushSubscriptions) {
+        user.pushSubscriptions = [];
+      }
+      user.pushSubscriptions.push(subscription);
+      await user.save();
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Subscription saved successfully'
+    });
+  } catch (error) {
+    console.error('Subscription error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error saving subscription'
+    });
+  }
+});
+
 // @route   GET /api/users
 // @desc    Get all users
 // @access  Private
