@@ -159,7 +159,7 @@ export default function Chat() {
   }, [chats]);
 
   return (
-    <div className="h-screen flex bg-gray-100">
+    <div className="h-[100dvh] flex bg-gray-100 overflow-hidden">
       {/* Mobile menu button */}
       <div className="md:hidden fixed top-4 left-4 z-50">
         <Button

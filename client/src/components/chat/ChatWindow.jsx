@@ -191,11 +191,11 @@ export default function ChatWindow({
   const otherMember = getOtherMember();
 
   return (
-    <div className="h-full flex overflow-hidden relative w-full">
+    <div className="h-full flex overflow-hidden relative w-full flex-col">
       {/* Main Chat Area */}
-      <div className={`flex-1 flex flex-col bg-whatsapp-gray min-w-0 transition-all duration-300`}>
-        {/* Header */}
-        <div className="flex flex-col bg-whatsapp-gray border-b border-gray-200">
+      <div className="flex-1 flex flex-col bg-whatsapp-gray min-w-0 h-full relative">
+        {/* Header - Sticky at top */}
+        <div className="sticky top-0 z-20 flex flex-col bg-whatsapp-gray border-b border-gray-200 shrink-0">
           <div className="flex items-center p-3">
             <div 
               className="flex items-center flex-1 min-w-0 cursor-pointer hover:bg-gray-200/50 p-1 rounded-lg transition-colors"
@@ -283,9 +283,9 @@ export default function ChatWindow({
           )}
         </div>
 
-        {/* Messages Area */}
-        <ScrollArea className="flex-1 p-4 bg-[#efeae2]">
-          <div className="max-w-4xl mx-auto space-y-4">
+        {/* Messages Area - Scrollable */}
+        <div className="flex-1 overflow-y-auto p-4 bg-[#efeae2] scroll-smooth">
+          <div className="max-w-4xl mx-auto space-y-4 pb-4">
             {filteredMessages.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-gray-400">{searchQuery ? 'No matches' : t.noMessages}</p>
@@ -331,12 +331,12 @@ export default function ChatWindow({
                 );
               })
             )}
-            <div ref={messagesEndRef} />
+            <div ref={messagesEndRef} className="h-1" />
           </div>
-        </ScrollArea>
+        </div>
 
-        {/* Input Footer Area */}
-        <div className="p-3 bg-whatsapp-gray border-t border-gray-200">
+        {/* Input Footer Area - Sticky at bottom */}
+        <div className="sticky bottom-0 z-20 p-3 bg-whatsapp-gray border-t border-gray-200 shrink-0">
           {showAttachMenu && (
             <div className="absolute bottom-20 left-4 bg-white rounded-lg shadow-xl border border-gray-200 p-2 animate-in slide-in-from-bottom duration-200 z-50 min-w-[200px]">
               <input
@@ -378,7 +378,7 @@ export default function ChatWindow({
             </div>
           )}
 
-          <div className="flex items-end space-x-2">
+          <div className="flex items-end space-x-2 max-w-4xl mx-auto">
             <input
               type="file"
               onChange={(e) => handleFileUpload(e, 'any')}
