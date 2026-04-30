@@ -39,15 +39,8 @@ api.interceptors.response.use(
   }
 );
 
-// Auth APIs
-export const authAPI = {
-  signup: (data) => api.post('/auth/signup', data),
-  login: (data) => api.post('/auth/login', data),
-  getMe: () => api.get('/auth/me'),
-};
-
 // User APIs
-export const userAPI = {
+const userAPI = {
   getUsers: (params) => api.get('/users', { params }),
   getUser: (id) => api.get(`/users/${id}`),
   getProfile: () => api.get('/users/profile/me'),
@@ -57,7 +50,7 @@ export const userAPI = {
 };
 
 // Chat APIs
-export const chatAPI = {
+const chatAPI = {
   getChats: () => api.get('/chats'),
   getChat: (id) => api.get(`/chats/${id}`),
   createIndividualChat: (userId) => api.post('/chats/individual', { userId }),
@@ -68,7 +61,7 @@ export const chatAPI = {
 };
 
 // Message APIs
-export const messageAPI = {
+const messageAPI = {
   getMessages: (chatId, params) => api.get(`/messages/${chatId}`, { params }),
   sendMessage: (data) => api.post('/messages', data),
   updateStatus: (messageId, status) => api.put(`/messages/${messageId}/status`, { status }),
@@ -76,7 +69,7 @@ export const messageAPI = {
 };
 
 // File APIs
-export const fileAPI = {
+const fileAPI = {
   uploadFile: (file) => {
     const formData = new FormData();
     formData.append('file', file);
@@ -100,7 +93,7 @@ export const fileAPI = {
   downloadFile: (path) => `${API_URL.replace('/api', '')}${path}`,
 };
 
-export const aiAPI = {
+const aiAPI = {
   generateResponse: (prompt) => axios.post('http://3.111.42.25:11434/api/generate', {
     model: 'llama3:latest',
     prompt: prompt,
@@ -111,6 +104,22 @@ export const aiAPI = {
     messages: messages,
     stream: false
   })
+};
+
+// Auth APIs
+const authAPI = {
+  signup: (data) => api.post('/auth/signup', data),
+  login: (data) => api.post('/auth/login', data),
+  getMe: () => api.get('/auth/me'),
+};
+
+export {
+  authAPI,
+  userAPI,
+  chatAPI,
+  messageAPI,
+  fileAPI,
+  aiAPI
 };
 
 export default api;
