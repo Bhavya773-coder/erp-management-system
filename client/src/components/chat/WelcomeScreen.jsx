@@ -1,10 +1,10 @@
-import { MessageSquare, Lock, Users, Zap } from 'lucide-react';
+import { Lock, Users, Zap } from 'lucide-react';
 
 export default function WelcomeScreen({ currentUser }) {
   return (
     <div className="h-full flex flex-col items-center justify-center bg-whatsapp-gray p-8 text-center">
-      <div className="w-24 h-24 bg-whatsapp-primary rounded-full flex items-center justify-center mb-6">
-        <MessageSquare className="w-12 h-12 text-white" />
+      <div className="w-24 h-24 bg-white rounded-3xl flex items-center justify-center mb-6 shadow-xl overflow-hidden border-2 border-whatsapp-primary">
+        <img src="/logo.jpeg" alt="Arcadian Logo" className="w-full h-full object-cover" />
       </div>
       
       <h1 className="text-3xl font-bold text-gray-800 mb-2">

@@ -91,8 +91,10 @@ export default function Signup() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-whatsapp-dark to-whatsapp-primary p-4 py-8">
       <Card className="w-full max-w-lg shadow-xl border-none">
         <CardHeader className="text-center">
-          <div className="mx-auto w-16 h-16 bg-whatsapp-primary rounded-full flex items-center justify-center mb-4 shadow-lg">
-            <MessageSquare className="w-8 h-8 text-white" />
+          <div className="flex justify-center mb-6">
+            <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center shadow-lg overflow-hidden border-2 border-whatsapp-primary">
+              <img src="/logo.jpeg" alt="Arcadian Logo" className="w-full h-full object-cover" />
+            </div>
           </div>
           <CardTitle className="text-2xl font-bold text-gray-800">Create Account</CardTitle>
           <CardDescription>
