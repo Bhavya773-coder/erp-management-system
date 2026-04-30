@@ -61,6 +61,8 @@ router.get('/', authenticate, async (req, res) => {
           messageType: lastMessage.messageType,
           status: lastMessage.status,
           createdAt: lastMessage.createdAt,
+          isCompleted: lastMessage.isCompleted || false,
+          scheduleDate: lastMessage.scheduleDate,
           sender: lastMessage.sender ? {
             id: lastMessage.sender._id,
             name: lastMessage.sender.name
@@ -274,6 +276,8 @@ router.get('/:id', authenticate, async (req, res) => {
       fileName: m.fileName,
       fileSize: m.fileSize,
       status: m.status,
+      isCompleted: m.isCompleted || false,
+      scheduleDate: m.scheduleDate,
       createdAt: m.createdAt,
       senderId: m.sender ? m.sender._id.toString() : 'unknown',
       sender: m.sender ? {
@@ -285,6 +289,49 @@ router.get('/:id', authenticate, async (req, res) => {
     res.json({ success: true, data: { chat: formattedChat, messages: formattedMessages } });
   } catch (error) {
     console.error('Get chat details error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// @route   DELETE /api/chats/:id
+// @desc    Delete a chat and all its messages for everyone
+// @access  Private
+router.delete('/:id', authenticate, async (req, res) => {
+  try {
+    const chatId = req.params.id;
+
+    // 1. Verify user is member of chat
+    const chat = await Chat.findOne({
+      _id: chatId,
+      'members.user': req.user._id
+    });
+
+    if (!chat) {
+      return res.status(404).json({ success: false, message: 'Chat not found or not authorized' });
+    }
+
+    // 2. Get member IDs for socket notification before deletion
+    const memberIds = chat.members.map(m => (m.user._id || m.user).toString());
+
+    // 3. Delete all messages associated with this chat
+    await Message.deleteMany({ chat: chatId });
+
+    // 4. Delete the chat itself
+    await Chat.findByIdAndDelete(chatId);
+
+    // 5. Notify all members via socket
+    if (req.io) {
+      memberIds.forEach(userId => {
+        req.io.to(`user:${userId}`).emit('chat:deleted', { chatId });
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Conversation deleted for everyone'
+    });
+  } catch (error) {
+    console.error('Delete chat error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });

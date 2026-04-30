@@ -64,8 +64,16 @@ const chatAPI = {
 const messageAPI = {
   getMessages: (chatId, params) => api.get(`/messages/${chatId}`, { params }),
   sendMessage: (data) => api.post('/messages', data),
+  getAllSchedules: () => api.get('/messages/schedules/all'),
+  completeSchedule: (id) => api.put(`/messages/${id}/complete`),
   updateStatus: (messageId, status) => api.put(`/messages/${messageId}/status`, { status }),
   deleteMessage: (id) => api.delete(`/messages/${id}`),
+};
+
+export const fleetAPI = {
+  getFiles: () => api.get('/fleet'),
+  uploadFile: (data) => api.post('/fleet', data),
+  deleteFile: (id) => api.delete(`/fleet/${id}`),
 };
 
 // File APIs

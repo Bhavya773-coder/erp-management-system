@@ -9,7 +9,7 @@ import ChatWindow from '@/components/chat/ChatWindow';
 import WelcomeScreen from '@/components/chat/WelcomeScreen';
 import CreateGroupModal from '@/components/chat/CreateGroupModal';
 import ProfileModal from '@/components/chat/ProfileModal';
-import AIView from '@/components/chat/AIView';
+import FleetView from '@/components/chat/FleetView';
 import { Button } from '@/components/ui/button';
 import { LogOut, Menu } from 'lucide-react';
 
@@ -26,7 +26,8 @@ export default function Chat() {
     clearCurrentChat,
     users: allUsers,
     fetchUsers: fetchAllUsers,
-    typingUsers
+    typingUsers,
+    deleteChat
   } = useChatStore();
   
   const [showSidebar, setShowSidebar] = useState(true);
@@ -40,6 +41,8 @@ export default function Chat() {
     joinChat, 
     leaveChat, 
     sendMessage, 
+    completeSchedule,
+    stopLocalAlarm,
     deleteMessageSocket,
     startTyping, 
     stopTyping, 
@@ -82,22 +85,24 @@ export default function Chat() {
 
   const handleChatSelect = (chat) => {
     setCurrentChat(chat);
+    setShowAI(false); // Ensure Utilities view is closed when a chat is selected
     if (window.innerWidth < 768) {
       setShowSidebar(false);
     }
   };
 
-  const handleSendMessage = (content, fileData = null) => {
+  const handleSendMessage = (content, options = null) => {
     if (!currentChat) return;
 
     const tempId = Date.now().toString();
     const messageData = {
       chatId: currentChat.id,
       content,
-      messageType: fileData ? (fileData.isImage ? 'IMAGE' : 'FILE') : 'TEXT',
-      fileUrl: fileData?.fileUrl,
-      fileName: fileData?.fileName,
-      fileSize: fileData?.fileSize,
+      messageType: options?.messageType || (options ? (options.isImage ? 'IMAGE' : 'FILE') : 'TEXT'),
+      fileUrl: options?.fileUrl,
+      fileName: options?.fileName,
+      fileSize: options?.fileSize,
+      scheduleDate: options?.scheduleDate,
       tempId,
     };
 
@@ -160,18 +165,6 @@ export default function Chat() {
 
   return (
     <div className="h-[100dvh] flex bg-gray-100 overflow-hidden">
-      {/* Mobile menu button */}
-      <div className="md:hidden fixed top-4 left-4 z-50">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setShowSidebar(!showSidebar)}
-          className="bg-white shadow-md"
-        >
-          <Menu className="h-5 w-5" />
-        </Button>
-      </div>
-
       {/* Sidebar */}
       <div className={`
         ${showSidebar ? 'translate-x-0' : '-translate-x-full'}
@@ -186,24 +179,36 @@ export default function Chat() {
           currentUser={user}
           chats={chats}
           users={allUsers}
+          messages={messages}
           typingUsers={typingUsers}
           currentChat={currentChat}
           onChatSelect={handleChatSelect}
           onCreateChat={handleCreateChat}
-          onCreateGroup={() => setShowCreateGroup(true)}
-          onEditProfile={() => setShowProfile(true)}
+          onCreateGroup={() => {
+            setShowCreateGroup(true);
+            if (window.innerWidth < 768) setShowSidebar(false);
+          }}
+          onEditProfile={() => {
+            setShowProfile(true);
+            if (window.innerWidth < 768) setShowSidebar(false);
+          }}
           onLogout={handleLogout}
           onToggleAI={() => {
-            setShowAI(!showAI);
-            if (!showAI) setCurrentChat(null);
+            const nextShowAI = !showAI;
+            setShowAI(nextShowAI);
+            if (nextShowAI) setCurrentChat(null);
+            if (window.innerWidth < 768) setShowSidebar(false);
           }}
         />
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col h-full">
+      <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
         {showAI ? (
-          <AIView onBack={() => setShowAI(false)} />
+          <FleetView onBack={() => {
+            setShowAI(false);
+            if (window.innerWidth < 768) setShowSidebar(true);
+          }} />
         ) : currentChat ? (
           <ChatWindow
             currentUser={user}
@@ -213,9 +218,15 @@ export default function Chat() {
             allUsers={allUsers}
             onSendMessage={handleSendMessage}
             onDeleteMessage={handleDeleteMessage}
+            onCompleteSchedule={completeSchedule}
+            onStopAlarm={stopLocalAlarm}
             onStartTyping={() => startTyping(currentChat.id)}
             onStopTyping={() => stopTyping(currentChat.id)}
-            onBack={() => setCurrentChat(null)}
+            onDeleteChat={deleteChat}
+            onBack={() => {
+              setCurrentChat(null);
+              if (window.innerWidth < 768) setShowSidebar(true);
+            }}
           />
         ) : (
           <WelcomeScreen currentUser={user} />

@@ -67,7 +67,7 @@ export const setupSocketHandlers = (io) => {
 
     // Handle send message
     socket.on('message:send', async (data) => {
-      const { chatId, content, messageType = 'TEXT', fileUrl, fileName, fileSize, tempId } = data;
+      const { chatId, content, messageType = 'TEXT', fileUrl, fileName, fileSize, scheduleDate, tempId } = data;
       
       try {
         // Verify user is member of chat
@@ -93,6 +93,7 @@ export const setupSocketHandlers = (io) => {
           fileUrl,
           fileName,
           fileSize,
+          scheduleDate,
           status: 'SENT'
         });
 
@@ -107,6 +108,8 @@ export const setupSocketHandlers = (io) => {
           fileName: populatedMessage.fileName,
           fileSize: populatedMessage.fileSize,
           status: populatedMessage.status,
+          scheduleDate: populatedMessage.scheduleDate,
+          isCompleted: populatedMessage.isCompleted || false,
           createdAt: populatedMessage.createdAt,
           senderId: populatedMessage.sender._id.toString(),
           sender: {
@@ -262,11 +265,7 @@ export const setupSocketHandlers = (io) => {
         
         // Only sender can delete for everyone
         if (message && message.sender.toString() === socket.userId) {
-          message.isDeleted = true;
-          message.content = 'This message was deleted';
-          message.fileUrl = null;
-          message.fileName = null;
-          await message.save();
+          await Message.findByIdAndDelete(messageId);
 
           // Get chat members to notify them
           const chat = await Chat.findById(chatId);
@@ -284,6 +283,44 @@ export const setupSocketHandlers = (io) => {
         }
       } catch (error) {
         console.error('Message delete error:', error);
+      }
+    });
+
+    // Handle marking schedule as completed
+    socket.on('message:complete_schedule', async (data) => {
+      const { messageId, chatId } = data;
+      
+      try {
+        const message = await Message.findById(messageId);
+        if (message && message.messageType === 'SCHEDULE') {
+          message.isCompleted = true;
+          await message.save();
+
+          // Notify all members via chat room and individual rooms
+          // This ensures anyone looking at the chat gets the instant update
+          io.to(`chat:${chatId}`).emit('message:updated', {
+            chatId,
+            messageId,
+            updates: { isCompleted: true }
+          });
+
+          // Also notify members' personal rooms (for those not currently in the chat room)
+          const chat = await Chat.findById(chatId);
+          if (chat) {
+            chat.members.forEach(member => {
+              if (member.user) {
+                const userId = (member.user._id || member.user).toString();
+                io.to(`user:${userId}`).emit('message:updated', {
+                  chatId,
+                  messageId,
+                  updates: { isCompleted: true }
+                });
+              }
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Complete schedule error:', error);
       }
     });
 

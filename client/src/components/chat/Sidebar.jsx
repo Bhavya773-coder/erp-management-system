@@ -44,8 +44,30 @@ export default function Sidebar({
 }) {
   const { language, setLanguage } = useAuthStore();
   const [searchQuery, setSearchQuery] = useState('');
-  const [showNewChat, setShowNewChat] = useState(false);
+  const [view, setView] = useState('chats'); // 'chats', 'directory', 'reminders'
+  const [allReminders, setAllReminders] = useState([]);
+  const [remindersLoading, setRemindersLoading] = useState(false);
   const t = translations[language];
+
+  const fetchAllReminders = async () => {
+    setRemindersLoading(true);
+    try {
+      const response = await messageAPI.getAllSchedules();
+      if (response.data.success) {
+        const sorted = response.data.data.schedules.sort((a, b) => {
+          if (a.isCompleted === b.isCompleted) {
+            return new Date(b.scheduleDate || 0) - new Date(a.scheduleDate || 0);
+          }
+          return a.isCompleted ? 1 : -1;
+        });
+        setAllReminders(sorted);
+      }
+    } catch (error) {
+      console.error('Failed to fetch reminders:', error);
+    } finally {
+      setRemindersLoading(false);
+    }
+  };
 
   const filteredChats = chats.filter(chat => 
     chat.name?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -58,7 +80,7 @@ export default function Sidebar({
 
   const getChatName = (chat) => {
     if (chat.isGroup) return chat.name;
-    const otherMember = chat.members?.find(m => m.user.id !== currentUser.id);
+    const otherMember = chat.members?.find(m => (m.user.id || m.user._id) !== currentUser.id);
     return otherMember?.user.name || 'Unknown User';
   };
 
@@ -70,13 +92,16 @@ export default function Sidebar({
     if (!url) return '';
     if (url.startsWith('http')) return url;
     const baseUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000';
-    return `${baseUrl}${url}`;
+    // Ensure baseUrl doesn't end with slash and url starts with slash
+    const normalizedBase = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+    const normalizedUrl = url.startsWith('/') ? url : `/${url}`;
+    return `${normalizedBase}${normalizedUrl}`;
   };
 
   const getMessageStatusIcon = (status) => {
     switch (status) {
       case 'SEEN':
-        return <CheckCheck className="w-3 h-3 text-blue-500" />;
+        return <CheckCheck className="w-3 h-3 text-whatsapp-primary" />;
       case 'DELIVERED':
         return <CheckCheck className="w-3 h-3 text-gray-400" />;
       case 'SENT':
@@ -100,65 +125,93 @@ export default function Sidebar({
   };
 
   return (
-    <div className="h-full flex flex-col bg-white border-r border-gray-200">
+    <div className="h-full flex flex-col bg-white border-r border-gray-100 shadow-sm overflow-hidden">
       {/* Header */}
-      <div className="p-4 bg-whatsapp-primary text-white">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-3">
-            <Avatar className="h-10 w-10 bg-white text-whatsapp-primary">
-              <AvatarImage src={getFullUrl(currentUser?.avatarUrl)} />
-              <AvatarFallback>{getInitials(currentUser?.name)}</AvatarFallback>
-            </Avatar>
-            <div>
-              <p className="font-semibold">{translateValue(currentUser?.name, language)}</p>
-              <p className="text-xs text-white/80 capitalize">{translateValue(currentUser?.role, language)}</p>
+      <div className="p-5 sm:p-6 bg-white">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center space-x-3 min-w-0">
+            <div className="relative shrink-0">
+              <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border-2 border-gray-50 shadow-sm">
+                <AvatarImage src={getFullUrl(currentUser?.avatarUrl)} />
+                <AvatarFallback className="bg-whatsapp-primary text-white font-bold">{getInitials(currentUser?.name)}</AvatarFallback>
+              </Avatar>
+              <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 border-2 border-white rounded-full"></div>
+            </div>
+            <div className="min-w-0">
+              <p className="font-black text-gray-900 truncate text-sm sm:text-base leading-tight">
+                {translateValue(currentUser?.name, language)}
+              </p>
+              <div className="flex items-center space-x-1">
+                <div className="w-1.5 h-1.5 rounded-full bg-whatsapp-primary"></div>
+                <p className="text-[10px] text-whatsapp-primary font-black uppercase tracking-wider truncate">
+                  {translateValue(currentUser?.role, language)}
+                </p>
+              </div>
             </div>
           </div>
-          <div className="flex items-center space-x-1">
+          
+          <div className="flex items-center space-x-1 shrink-0">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="text-white hover:bg-white/20">
+                <Button variant="ghost" size="icon" className="h-9 w-9 text-gray-400 hover:text-whatsapp-primary hover:bg-whatsapp-primary/5 rounded-full">
                   <Globe className="h-5 w-5" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setLanguage('en')}>English (EN)</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setLanguage('hi')}>हिन्दी (HI)</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setLanguage('gu')}>ગુજરાતી (GU)</DropdownMenuItem>
+              <DropdownMenuContent align="end" className="rounded-2xl border-gray-100 shadow-2xl">
+                <DropdownMenuItem onClick={() => setLanguage('en')} className="font-bold py-2 px-4 rounded-xl">English (EN)</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setLanguage('hi')} className="font-bold py-2 px-4 rounded-xl">हिन्दी (HI)</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setLanguage('gu')} className="font-bold py-2 px-4 rounded-xl">ગુજરાતી (GU)</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            {/* AI Assistant Button (Disabled for now) ... */}
-            
-            {currentUser?.role === 'ADMIN' && (
-              <Link to="/admin">
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  className="text-white hover:bg-white/20" 
-                  title="Admin Dashboard"
-                >
-                  <LayoutDashboard className="h-5 w-5" />
-                </Button>
-              </Link>
-            )}
 
-            <Button variant="ghost" size="icon" className="text-white hover:bg-white/20" onClick={onEditProfile}>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-9 w-9 text-gray-400 hover:text-whatsapp-primary hover:bg-whatsapp-primary/5 rounded-full" 
+              onClick={onEditProfile}
+            >
               <Settings className="h-5 w-5" />
             </Button>
-            <Button variant="ghost" size="icon" className="text-white hover:bg-white/20" onClick={onLogout}>
+            
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-9 w-9 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-full" 
+              onClick={onLogout}
+            >
               <LogOut className="h-5 w-5" />
             </Button>
           </div>
         </div>
 
+        {/* Global Navigation - Full Width Stack */}
+        <div className="space-y-2 mb-6">
+          <button 
+            onClick={onToggleAI}
+            className="w-full flex items-center justify-center py-4 bg-whatsapp-primary/5 hover:bg-whatsapp-primary text-whatsapp-primary hover:text-white rounded-[1.5rem] border border-whatsapp-primary/10 transition-all group"
+          >
+            <Sparkles className="h-5 w-5 mr-3 group-hover:rotate-12 transition-transform" />
+            <span className="text-xs font-black uppercase tracking-[0.2em]">Utilities</span>
+          </button>
+          
+          {currentUser?.role === 'ADMIN' && (
+            <Link to="/admin" className="block">
+              <button className="w-full flex items-center justify-center py-4 bg-gray-50/50 hover:bg-gray-900 text-gray-400 hover:text-white rounded-[1.5rem] border border-gray-100/50 transition-all group">
+                <LayoutDashboard className="h-5 w-5 mr-3" />
+                <span className="text-xs font-black uppercase tracking-[0.2em]">Admin Panel</span>
+              </button>
+            </Link>
+          )}
+        </div>
+
         {/* Search */}
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input
             placeholder={t.searchPlaceholder}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 bg-white/10 border-0 text-white placeholder:text-white/70 focus-visible:ring-white/30"
+            className="pl-11 h-12 bg-gray-50 border-none rounded-2xl text-sm font-medium placeholder:text-gray-400 focus-visible:ring-blue-100 transition-all"
           />
         </div>
       </div>
@@ -169,7 +222,9 @@ export default function Sidebar({
           <Button 
             variant="outline" 
             className="flex-1 text-xs h-8"
-            onClick={() => setShowNewChat(!showNewChat)}
+            onClick={() => {
+              setView('directory');
+            }}
           >
             <Plus className="w-3 h-3 mr-1" />
             {t.newChat}
@@ -186,58 +241,39 @@ export default function Sidebar({
         
         <div className="flex bg-gray-100 p-1 rounded-lg">
           <button 
-            onClick={() => setShowNewChat(false)}
-            className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${!showNewChat ? 'bg-white shadow-sm text-whatsapp-primary' : 'text-gray-500 hover:text-gray-700'}`}
+            onClick={() => setView('chats')}
+            className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${view === 'chats' ? 'bg-white shadow-sm text-whatsapp-primary' : 'text-gray-500 hover:text-gray-700'}`}
           >
             {t.chats || 'Chats'}
           </button>
           <button 
-            onClick={() => setShowNewChat(true)}
-            className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all relative ${showNewChat ? 'bg-white shadow-sm text-whatsapp-primary' : 'text-gray-500 hover:text-gray-700'}`}
+            onClick={() => setView('directory')}
+            className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all relative ${view === 'directory' ? 'bg-white shadow-sm text-whatsapp-primary' : 'text-gray-500 hover:text-gray-700'}`}
           >
             {t.directory || 'Directory'}
-            {users.filter(u => u.isOnline).length > 0 && (
-              <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500 border border-white"></span>
+          </button>
+          <button 
+            onClick={() => {
+              setView('reminders');
+              fetchAllReminders();
+            }}
+            className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all relative ${view === 'reminders' ? 'bg-white shadow-sm text-whatsapp-primary' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            {t.reminders || 'Tasks'}
+            {allReminders.filter(r => !r.isCompleted).length > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-orange-500 text-[8px] text-white font-bold border border-white">
+                {allReminders.filter(r => !r.isCompleted).length}
               </span>
             )}
           </button>
         </div>
       </div>
 
-      {/* Online Now - Horizontal List (Only in Chats tab) */}
-      {!showNewChat && users.some(u => u.isOnline) && (
-        <div className="py-3 border-b border-gray-50">
-          <p className="px-4 text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Online Now</p>
-          <ScrollArea className="w-full" orientation="horizontal">
-            <div className="flex space-x-4 px-4 pb-2">
-              {users.filter(u => u.isOnline).map(user => (
-                <button 
-                  key={user.id} 
-                  onClick={() => onCreateChat(user.id)}
-                  className="flex flex-col items-center space-y-1 min-w-[50px]"
-                >
-                  <div className="relative">
-                    <Avatar className="h-10 w-10 border-2 border-green-500 p-0.5">
-                      <AvatarImage src={getFullUrl(user.avatarUrl)} className="rounded-full" />
-                      <AvatarFallback className="text-[10px]">{getInitials(user.name)}</AvatarFallback>
-                    </Avatar>
-                    <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 border-2 border-white rounded-full"></div>
-                  </div>
-                  <p className="text-[10px] font-medium text-gray-600 truncate w-12 text-center">
-                    {user.name.split(' ')[0]}
-                  </p>
-                </button>
-              ))}
-            </div>
-          </ScrollArea>
-        </div>
-      )}
 
-      {/* Chat List */}
+
+      {/* Content Area */}
       <ScrollArea className="flex-1">
-        {showNewChat ? (
+        {view === 'directory' ? (
           <div className="p-3">
             <h3 className="text-sm font-semibold text-gray-500 mb-2 px-2">Select a user</h3>
             {filteredUsers.length === 0 ? (
@@ -249,7 +285,7 @@ export default function Sidebar({
                     key={user.id}
                     onClick={() => {
                       onCreateChat(user.id);
-                      setShowNewChat(false);
+                      setView('chats');
                     }}
                     className="w-full flex items-center p-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
                   >
@@ -271,19 +307,69 @@ export default function Sidebar({
               </div>
             )}
           </div>
+        ) : view === 'reminders' ? (
+          <div className="p-3">
+            <h3 className="text-sm font-semibold text-gray-500 mb-3 px-2 flex justify-between items-center">
+              Active Tasks
+              <Button variant="ghost" size="sm" onClick={fetchAllReminders} className="h-6 w-6 p-0">
+                <Clock className="w-3 h-3" />
+              </Button>
+            </h3>
+            {remindersLoading ? (
+              <div className="flex justify-center py-8">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-whatsapp-primary"></div>
+              </div>
+            ) : allReminders.length === 0 ? (
+              <p className="text-center text-gray-400 py-8">No tasks found</p>
+            ) : (
+              <div className="space-y-2">
+                {allReminders.map((reminder) => (
+                  <button
+                    key={reminder.id}
+                    onClick={() => {
+                      const chat = chats.find(c => c.id === reminder.chat);
+                      if (chat) onChatSelect(chat);
+                    }}
+                    className={`
+                      w-full p-3 rounded-xl border text-left transition-all hover:shadow-md
+                      ${reminder.isCompleted ? 'bg-gray-50 border-gray-100 opacity-60' : 'bg-gradient-to-br from-orange-50 to-white border-orange-100'}
+                    `}
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <div className={`p-1.5 rounded-md ${reminder.isCompleted ? 'bg-gray-400' : 'bg-orange-500'}`}>
+                        <Clock className="w-3.5 h-3.5 text-white" />
+                      </div>
+                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${reminder.isCompleted ? 'bg-gray-100 text-gray-500' : 'bg-white text-orange-600 border-orange-100'}`}>
+                        {reminder.isCompleted ? 'DONE' : 'PENDING'}
+                      </span>
+                    </div>
+                    <p className={`text-xs font-bold leading-tight mb-1 ${reminder.isCompleted ? 'text-gray-500 line-through' : 'text-gray-800'}`}>
+                      {reminder.content}
+                    </p>
+                    <div className="flex justify-between items-center mt-2">
+                      <p className="text-[9px] text-gray-400">By: {reminder.sender?.name}</p>
+                      <p className="text-[9px] font-medium text-orange-600">
+                        {reminder.scheduleDate ? format(new Date(reminder.scheduleDate), 'MMM d, p') : ''}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         ) : (
           <div>
             {filteredChats.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-gray-400 mb-2">{t.noChats}</p>
-                <Button variant="ghost" onClick={() => setShowNewChat(true)}>
+                <Button variant="ghost" onClick={() => setView('directory')}>
                   {t.startConversation}
                 </Button>
               </div>
             ) : (
               <div className="divide-y divide-gray-50">
                 {filteredChats.map((chat) => {
-                  const otherMember = chat.members?.find(m => m.user.id !== currentUser.id);
+                  const otherMember = chat.members?.find(m => (m.user.id || m.user._id) !== currentUser.id);
                   const lastMessage = chat.lastMessage;
                   const isActive = currentChat?.id === chat.id;
 
@@ -351,7 +437,7 @@ export default function Sidebar({
                                   ) : (
                                     lastMessage.messageType === 'TEXT' 
                                       ? lastMessage.content 
-                                      : `Shared ${lastMessage.messageType.toLowerCase()}`
+                                      : (lastMessage.messageType === 'SCHEDULE' ? '⏰ Scheduled Reminder' : `Shared ${lastMessage.messageType.toLowerCase()}`)
                                   )
                                 ) : (
                                   'No messages yet'

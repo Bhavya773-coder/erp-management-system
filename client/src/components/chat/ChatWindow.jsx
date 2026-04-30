@@ -19,11 +19,14 @@ import {
   X,
   Users,
   Image as ImageIcon,
-  File
+  File,
+  Trash2
 } from 'lucide-react';
 import { fileAPI } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { format, isToday, isYesterday } from 'date-fns';
+import ScheduleDialog from './ScheduleDialog';
+import { Calendar } from 'lucide-react';
 
 export default function ChatWindow({ 
   currentUser, 
@@ -31,8 +34,11 @@ export default function ChatWindow({
   messages, 
   onSendMessage,
   onDeleteMessage,
+  onCompleteSchedule,
+  onStopAlarm,
   onStartTyping,
   onStopTyping,
+  onDeleteChat,
   onBack 
 }) {
   const { language } = useAuthStore();
@@ -48,6 +54,25 @@ export default function ChatWindow({
   const typingTimeoutRef = useRef(null);
   const fileInputRef = useRef(null);
   const { toast } = useToast();
+
+  const handleDeleteChat = async () => {
+    if (window.confirm('Are you sure you want to delete this whole conversation for everyone? This action cannot be undone and all data will be erased.')) {
+      const result = await onDeleteChat(chat.id);
+      if (result.success) {
+        toast({
+          title: "Conversation Deleted",
+          description: "The chat has been permanently erased for all members.",
+          variant: "default",
+        });
+      } else {
+        toast({
+          title: "Deletion Failed",
+          description: result.error || "Could not delete the conversation.",
+          variant: "destructive",
+        });
+      }
+    }
+  };
 
   const filteredMessages = messages.filter(m => 
     !m.isDeleted && m.content?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -190,21 +215,31 @@ export default function ChatWindow({
 
   const otherMember = getOtherMember();
 
+  const [showScheduleDialog, setShowScheduleDialog] = useState(false);
+  const [showPinMenu, setShowPinMenu] = useState(false);
+
+  const handleScheduleSend = (scheduleData) => {
+    onSendMessage(scheduleData.title, {
+      messageType: 'SCHEDULE',
+      scheduleDate: scheduleData.scheduleDate
+    });
+  };
+
   return (
     <div className="h-full flex overflow-hidden relative w-full flex-col">
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col bg-whatsapp-gray min-w-0 h-full relative">
         {/* Header - Sticky at top */}
-        <div className="sticky top-0 z-20 flex flex-col bg-whatsapp-gray border-b border-gray-200 shrink-0">
-          <div className="flex items-center p-3">
+        <div className="sticky top-0 z-20 flex flex-col bg-white/80 backdrop-blur-md border-b border-gray-100 shrink-0">
+          <div className="flex items-center p-2 sm:p-4">
             <div 
-              className="flex items-center flex-1 min-w-0 cursor-pointer hover:bg-gray-200/50 p-1 rounded-lg transition-colors"
+              className="flex items-center flex-1 min-w-0 cursor-pointer hover:bg-gray-100/50 p-1 rounded-2xl transition-all"
               onClick={() => setShowDetails(true)}
             >
               <Button 
                 variant="ghost" 
                 size="icon" 
-                className="md:hidden mr-2"
+                className="md:hidden mr-1 sm:mr-2"
                 onClick={(e) => {
                   e.stopPropagation();
                   onBack();
@@ -213,37 +248,37 @@ export default function ChatWindow({
                 <ArrowLeft className="h-5 w-5" />
               </Button>
               
-              <div className="relative">
-                <Avatar className="h-10 w-10 border border-gray-300">
+              <div className="relative shrink-0">
+                <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border-2 border-white shadow-sm">
                   {chat.isGroup ? (
                     <div className="bg-whatsapp-primary w-full h-full flex items-center justify-center">
-                      <Users className="h-5 w-5 text-white" />
+                      <Users className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
                     </div>
                   ) : (
                     <>
                       <AvatarImage src={getFullUrl(otherMember?.user?.avatarUrl)} />
-                      <AvatarFallback className="bg-whatsapp-primary text-white">
+                      <AvatarFallback className="bg-whatsapp-primary text-white text-sm sm:text-base">
                         {getInitials(getChatName())}
                       </AvatarFallback>
                     </>
                   )}
                 </Avatar>
                 {!chat.isGroup && getChatStatus() === 'Online' && (
-                  <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></div>
+                  <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full shadow-sm"></div>
                 )}
               </div>
               
               <div className="ml-3 flex-1 min-w-0">
-                <p className="font-semibold truncate">{translateValue(getChatName(), language)}</p>
-                <p className="text-xs text-gray-500 truncate">{translateValue(getChatStatus(), language)}</p>
+                <p className="font-bold text-gray-900 truncate text-sm sm:text-base">{translateValue(getChatName(), language)}</p>
+                <p className="text-[10px] sm:text-xs text-gray-500 truncate font-medium uppercase tracking-wider">{translateValue(getChatStatus(), language)}</p>
               </div>
             </div>
             
-            <div className="flex items-center space-x-1">
+            <div className="flex items-center space-x-1 sm:space-x-2">
               <Button 
                 variant="ghost" 
                 size="icon" 
-                className={`text-gray-600 ${showSearch ? 'bg-gray-200' : ''}`}
+                className={`text-gray-500 rounded-full h-10 w-10 ${showSearch ? 'bg-whatsapp-primary/10 text-whatsapp-primary' : ''}`}
                 onClick={() => {
                   setShowSearch(!showSearch);
                   if (showSearch) setSearchQuery('');
@@ -251,7 +286,7 @@ export default function ChatWindow({
               >
                 <Search className="h-5 w-5" />
               </Button>
-              <Button variant="ghost" size="icon" className="text-gray-600">
+              <Button variant="ghost" size="icon" className="text-gray-500 rounded-full h-10 w-10">
                 <MoreVertical className="h-5 w-5" />
               </Button>
             </div>
@@ -284,8 +319,8 @@ export default function ChatWindow({
         </div>
 
         {/* Messages Area - Scrollable */}
-        <div className="flex-1 overflow-y-auto p-4 bg-[#efeae2] scroll-smooth">
-          <div className="max-w-4xl mx-auto space-y-4 pb-4">
+        <div className="flex-1 overflow-y-auto py-4 px-1 sm:px-4 bg-[#efeae2] scroll-smooth">
+          <div className="max-w-4xl w-full mx-auto space-y-4 pb-4">
             {filteredMessages.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-gray-400">{searchQuery ? 'No matches' : t.noMessages}</p>
@@ -326,6 +361,8 @@ export default function ChatWindow({
                       isOwn={(message.senderId || message.sender?._id || message.sender?.id)?.toString() === currentUser?.id?.toString()}
                       showAvatar={!chat.isGroup ? false : true}
                       onDelete={onDeleteMessage}
+                      onComplete={onCompleteSchedule}
+                      onStopAlarm={onStopAlarm}
                     />
                   </div>
                 );
@@ -336,49 +373,44 @@ export default function ChatWindow({
         </div>
 
         {/* Input Footer Area - Sticky at bottom */}
-        <div className="sticky bottom-0 z-20 p-3 bg-whatsapp-gray border-t border-gray-200 shrink-0">
-          {showAttachMenu && (
-            <div className="absolute bottom-20 left-4 bg-white rounded-lg shadow-xl border border-gray-200 p-2 animate-in slide-in-from-bottom duration-200 z-50 min-w-[200px]">
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => handleFileUpload(e, 'image')}
-                className="hidden"
-                id="image-input"
-              />
-              <label 
-                htmlFor="image-input"
-                className="flex items-center p-2 hover:bg-gray-100 rounded cursor-pointer"
+        <div className="sticky bottom-0 z-20 p-2 sm:p-4 bg-white/80 backdrop-blur-md border-t border-gray-100 shrink-0">
+          {showPinMenu && (
+            <div className="absolute bottom-full left-4 mb-4 bg-white rounded-3xl shadow-2xl border border-gray-100 p-3 animate-in slide-in-from-bottom-4 duration-300 z-50 min-w-[240px] overflow-hidden">
+              <button 
+                onClick={() => {
+                  setShowPinMenu(false);
+                  fileInputRef.current?.click();
+                }}
+                className="flex items-center p-4 hover:bg-whatsapp-primary/5 rounded-2xl w-full transition-all group"
               >
-                <ImageIcon className="w-5 h-5 mr-2 text-purple-500" />
-                <span className="text-sm">Image</span>
-              </label>
-              
-              <input
-                type="file"
-                onChange={(e) => handleFileUpload(e, 'file')}
-                className="hidden"
-                id="file-input"
-              />
-              <label 
-                htmlFor="file-input"
-                className="flex items-center p-2 hover:bg-gray-100 rounded cursor-pointer"
-              >
-                <File className="w-5 h-5 mr-2 text-blue-500" />
-                <span className="text-sm">Document</span>
-              </label>
+                <div className="p-2 bg-whatsapp-primary/10 rounded-xl group-hover:bg-whatsapp-primary group-hover:text-white transition-colors mr-3">
+                  <File className="w-5 h-5 text-whatsapp-primary" />
+                </div>
+                <div className="text-left">
+                  <p className="text-sm font-bold text-gray-900">Photos & Files</p>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-widest font-medium">Send documents</p>
+                </div>
+              </button>
               
               <button 
-                onClick={() => setShowAttachMenu(false)}
-                className="flex items-center p-2 hover:bg-gray-100 rounded w-full"
+                onClick={() => {
+                  setShowPinMenu(false);
+                  setShowScheduleDialog(true);
+                }}
+                className="flex items-center p-4 hover:bg-orange-50 rounded-2xl w-full transition-all group"
               >
-                <X className="w-5 h-5 mr-2 text-gray-500" />
-                <span className="text-sm">Cancel</span>
+                <div className="p-2 bg-orange-100 rounded-xl group-hover:bg-orange-500 group-hover:text-white transition-colors mr-3">
+                  <Calendar className="w-5 h-5 text-orange-500 group-hover:text-white" />
+                </div>
+                <div className="text-left">
+                  <p className="text-sm font-bold text-gray-900">Create Schedule</p>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-widest font-medium">Team Reminders</p>
+                </div>
               </button>
             </div>
           )}
 
-          <div className="flex items-end space-x-2 max-w-4xl mx-auto">
+          <div className="flex items-center space-x-2 sm:space-x-4 max-w-5xl mx-auto">
             <input
               type="file"
               onChange={(e) => handleFileUpload(e, 'any')}
@@ -389,20 +421,21 @@ export default function ChatWindow({
             <Button 
               variant="ghost" 
               size="icon"
-              className="text-gray-600 flex-shrink-0"
-              onClick={() => fileInputRef.current?.click()}
+              className={`h-11 w-11 rounded-full text-gray-500 transition-all ${showPinMenu ? 'bg-whatsapp-primary text-white rotate-45' : 'hover:bg-gray-100'}`}
+              onClick={() => setShowPinMenu(!showPinMenu)}
               disabled={isUploading}
             >
               <Paperclip className={`h-5 w-5 ${isUploading ? 'animate-spin' : ''}`} />
             </Button>
             
-            <div className="flex-1 bg-white rounded-lg">
-              <Input
+            <div className="flex-1 min-w-0 bg-gray-100/50 rounded-[1.5rem] border border-transparent focus-within:bg-white focus-within:border-whatsapp-primary focus-within:shadow-sm transition-all px-2">
+              <input
+                type="text"
                 placeholder={t.typeMessage}
                 value={inputMessage}
                 onChange={handleInputChange}
                 onKeyPress={handleKeyPress}
-                className="border-0 bg-transparent focus-visible:ring-0"
+                className="w-full min-w-0 h-11 bg-transparent border-0 outline-none focus:ring-0 px-2 text-sm sm:text-base text-gray-900 placeholder:text-gray-500"
                 disabled={isUploading}
               />
             </div>
@@ -410,13 +443,19 @@ export default function ChatWindow({
             <Button 
               onClick={handleSend}
               disabled={!inputMessage.trim() || isUploading}
-              className="bg-whatsapp-primary hover:bg-whatsapp-dark flex-shrink-0"
+              className="bg-whatsapp-primary hover:bg-whatsapp-dark text-white shadow-lg shadow-whatsapp-primary/20 rounded-full h-11 w-11 shrink-0 transition-transform active:scale-90"
               size="icon"
             >
               <Send className="h-5 w-5" />
             </Button>
           </div>
         </div>
+
+        <ScheduleDialog 
+          open={showScheduleDialog} 
+          onOpenChange={setShowScheduleDialog}
+          onSchedule={handleScheduleSend}
+        />
       </div>
 
       {/* Chat Details Panel */}
@@ -539,6 +578,22 @@ export default function ChatWindow({
                   </div>
                 </>
               )}
+
+              <Separator className="my-6" />
+              
+              <div className="pt-2 pb-8">
+                <Button 
+                  variant="destructive" 
+                  className="w-full bg-red-50 text-red-600 border-red-100 hover:bg-red-600 hover:text-white transition-all rounded-xl font-bold py-6"
+                  onClick={handleDeleteChat}
+                >
+                  <Trash2 className="w-5 h-5 mr-2" />
+                  DELETE CONVERSATION
+                </Button>
+                <p className="text-[10px] text-gray-400 mt-3 text-center leading-relaxed">
+                  Permanently erase all messages and data for both you and the other participant.
+                </p>
+              </div>
             </div>
           </ScrollArea>
         </div>

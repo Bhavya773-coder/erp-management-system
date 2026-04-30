@@ -1,51 +1,55 @@
-import { Lock, Users, Zap } from 'lucide-react';
+import { Lock, Users, Zap, Sparkles, FolderOpen, ShieldCheck } from 'lucide-react';
 
 export default function WelcomeScreen({ currentUser }) {
   return (
-    <div className="h-full flex flex-col items-center justify-center bg-whatsapp-gray p-8 text-center">
-      <div className="w-24 h-24 mb-6">
-        <img src="/logo.png" alt="Arcadian Logo" className="w-full h-full object-contain" />
+    <div className="h-full flex flex-col items-center justify-center bg-gray-50 p-6 sm:p-12 text-center overflow-y-auto">
+      <div className="w-24 h-24 sm:w-32 sm:h-32 mb-8 animate-in zoom-in duration-500">
+        <img src="/logo.png" alt="Arcadian Logo" className="w-full h-full object-contain drop-shadow-2xl" />
       </div>
       
-      <h1 className="text-3xl font-bold text-gray-800 mb-2">
-        Welcome, {currentUser?.name?.split(' ')[0]}!
-      </h1>
-      
-      <p className="text-gray-500 mb-12 max-w-md text-lg">
-        Select a chat from the sidebar or start a new conversation to begin messaging.
-      </p>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-3xl">
-        <div className="flex flex-col items-center p-6 bg-white/50 rounded-2xl shadow-sm border border-gray-100/50 backdrop-blur-sm transition-all hover:shadow-md">
-          <div className="w-14 h-14 bg-green-100 rounded-2xl flex items-center justify-center mb-4 transform rotate-3">
-            <Zap className="w-7 h-7 text-green-600" />
-          </div>
-          <h3 className="font-bold text-gray-800 mb-2">Real-time Chat</h3>
-          <p className="text-sm text-gray-500 leading-relaxed">Instant messaging with live typing indicators</p>
-        </div>
-
-        <div className="flex flex-col items-center p-6 bg-white/50 rounded-2xl shadow-sm border border-gray-100/50 backdrop-blur-sm transition-all hover:shadow-md">
-          <div className="w-14 h-14 bg-blue-100 rounded-2xl flex items-center justify-center mb-4 -rotate-3">
-            <Users className="w-7 h-7 text-blue-600" />
-          </div>
-          <h3 className="font-bold text-gray-800 mb-2">Group Chats</h3>
-          <p className="text-sm text-gray-500 leading-relaxed">Create groups and collaborate with your team</p>
-        </div>
-
-        <div className="flex flex-col items-center p-6 bg-white/50 rounded-2xl shadow-sm border border-gray-100/50 backdrop-blur-sm transition-all hover:shadow-md">
-          <div className="w-14 h-14 bg-purple-100 rounded-2xl flex items-center justify-center mb-4 rotate-6">
-            <Lock className="w-7 h-7 text-purple-600" />
-          </div>
-          <h3 className="font-bold text-gray-800 mb-2">Secure</h3>
-          <p className="text-sm text-gray-500 leading-relaxed">Your conversations are private and secure</p>
-        </div>
-      </div>
-
-      <div className="mt-16 flex flex-col items-center">
-        <div className="h-px w-16 bg-gray-200 mb-6" />
-        <p className="text-sm font-bold text-whatsapp-primary tracking-[0.2em] uppercase">
-          Arcadian ERP
+      <div className="space-y-3 mb-12 sm:mb-16">
+        <h1 className="text-3xl sm:text-5xl font-black text-gray-900 tracking-tight">
+          Welcome, <span className="text-whatsapp-primary">{currentUser?.name?.split(' ')[0]}</span>!
+        </h1>
+        <p className="text-gray-500 max-w-lg mx-auto text-base sm:text-xl font-medium leading-relaxed">
+          The central hub for <span className="text-gray-900 font-bold">Arcadian Works</span> operations. Select a workspace to begin.
         </p>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-8 max-w-5xl w-full">
+        <div className="group flex flex-col items-center p-8 bg-white rounded-[2.5rem] shadow-xl shadow-gray-200/50 border border-gray-100 transition-all hover:scale-105 hover:shadow-2xl">
+          <div className="w-16 h-16 bg-whatsapp-primary/10 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-whatsapp-primary group-hover:text-white transition-all duration-300">
+            <Zap className="w-8 h-8 text-whatsapp-primary group-hover:text-white" />
+          </div>
+          <h3 className="font-black text-gray-900 text-lg mb-2">Live Fleet</h3>
+          <p className="text-sm text-gray-500 font-medium leading-relaxed">Real-time sync and instant communication.</p>
+        </div>
+
+        <div className="group flex flex-col items-center p-8 bg-white rounded-[2.5rem] shadow-xl shadow-gray-200/50 border border-gray-100 transition-all hover:scale-105 hover:shadow-2xl">
+          <div className="w-16 h-16 bg-orange-50 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-orange-500 group-hover:text-white transition-all duration-300">
+            <FolderOpen className="w-8 h-8 text-orange-600 group-hover:text-white" />
+          </div>
+          <h3 className="font-black text-gray-900 text-lg mb-2">Resource Hub</h3>
+          <p className="text-sm text-gray-500 font-medium leading-relaxed">Centralized company data and fleet files.</p>
+        </div>
+
+        <div className="group flex flex-col items-center p-8 bg-white rounded-[2.5rem] shadow-xl shadow-gray-200/50 border border-gray-100 transition-all hover:scale-105 hover:shadow-2xl">
+          <div className="w-16 h-16 bg-green-50 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-green-600 group-hover:text-white transition-all duration-300">
+            <ShieldCheck className="w-8 h-8 text-green-600 group-hover:text-white" />
+          </div>
+          <h3 className="font-black text-gray-900 text-lg mb-2">Secure</h3>
+          <p className="text-sm text-gray-500 font-medium leading-relaxed">Enterprise-grade security and encryption.</p>
+        </div>
+      </div>
+
+      <div className="mt-16 sm:mt-24 flex flex-col items-center opacity-50">
+        <div className="h-1.5 w-12 bg-gray-200 rounded-full mb-6" />
+        <div className="flex items-center space-x-2">
+          <Sparkles className="w-4 h-4 text-whatsapp-primary" />
+          <p className="text-[10px] font-black text-gray-400 tracking-[0.3em] uppercase">
+            Powered by Arcadian AI
+          </p>
+        </div>
       </div>
     </div>
   );

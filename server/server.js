@@ -8,9 +8,11 @@ import userRoutes from './routes/user.routes.js';
 import chatRoutes from './routes/chat.routes.js';
 import messageRoutes from './routes/message.routes.js';
 import fileRoutes from './routes/file.routes.js';
+import fleetRoutes from './routes/fleet.routes.js';
 import { socketAuth } from './middleware/socketAuth.js';
 import { setupSocketHandlers } from './socket/handlers.js';
 import connectDB from './config/db.js';
+import { initScheduleService } from './services/scheduleService.js';
 
 dotenv.config();
 
@@ -57,6 +59,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/chats', chatRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/files', fileRoutes);
+app.use('/api/fleet', fleetRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -66,6 +69,7 @@ app.get('/api/health', (req, res) => {
 // Socket.IO middleware and handlers
 io.use(socketAuth);
 setupSocketHandlers(io);
+initScheduleService(io);
 
 // Global error handler
 app.use((err, req, res, next) => {

@@ -7,8 +7,11 @@ const messageSchema = new mongoose.Schema({
   fileUrl: { type: String },
   fileName: { type: String },
   fileSize: { type: Number },
-  messageType: { type: String, enum: ['TEXT', 'FILE', 'IMAGE'], default: 'TEXT' },
+  messageType: { type: String, enum: ['TEXT', 'FILE', 'IMAGE', 'SCHEDULE'], default: 'TEXT' },
   status: { type: String, enum: ['SENT', 'DELIVERED', 'SEEN'], default: 'SENT' },
+  scheduleDate: { type: Date },
+  isCompleted: { type: Boolean, default: false },
+  isNotified: { type: Boolean, default: false },
   isDeleted: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }

@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import { useChatStore } from '@/store/chatStore';
 import { useAuthStore } from '@/store/authStore';
+import { messageAPI } from '@/lib/api';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
 
@@ -9,6 +10,7 @@ export const useSocket = (token) => {
   const socketRef = useRef(null);
   const { addMessage, updateMessageStatus, setTypingUser, updateUserStatus, updateUser, removeUser, addUser, deleteMessage, upsertChat } = useChatStore();
   const { user: currentUser } = useAuthStore();
+  const activeAlarms = useRef({});
 
   useEffect(() => {
     if (!token) return;
@@ -85,9 +87,26 @@ export const useSocket = (token) => {
       deleteMessage(chatId, messageId);
     });
 
+    socket.on('message:updated', ({ chatId, messageId, updates }) => {
+      useChatStore.getState().updateMessage(chatId, messageId, updates);
+      
+      // If marked as completed, stop the alarm for this message
+      if (updates.isCompleted && activeAlarms.current[messageId]) {
+        activeAlarms.current[messageId].pause();
+        activeAlarms.current[messageId].currentTime = 0;
+        delete activeAlarms.current[messageId];
+      }
+    });
+
     socket.on('chat:updated', ({ chat }) => {
       console.log('🔄 Chat updated:', chat.id);
       upsertChat(chat);
+    });
+
+    socket.on('chat:deleted', ({ chatId }) => {
+      console.log('🗑️ Chat deleted for everyone:', chatId);
+      // We'll add this method to the store to handle local removal
+      useChatStore.getState().deleteChatLocal(chatId);
     });
 
     socket.on('message:error', ({ error, tempId }) => {
@@ -136,8 +155,56 @@ export const useSocket = (token) => {
       removeUser(userId);
     });
 
+    socket.on('notification:schedule_due', (data) => {
+      console.log('⏰ Schedule due notification:', data);
+      
+      // If already completed, don't ring
+      if (data.isCompleted) return;
+
+      // Play notification sound in a loop
+      try {
+        const audio = new Audio('/alarm.wav');
+        audio.loop = true;
+        audio.play().catch(e => console.log('Audio play failed:', e));
+        
+        // Track this alarm
+        activeAlarms.current[data.messageId] = audio;
+
+        // Stop the "alarm" when any key is pressed or clicked
+        const stopAlarm = () => {
+          if (activeAlarms.current[data.messageId]) {
+            audio.pause();
+            audio.currentTime = 0;
+            delete activeAlarms.current[data.messageId];
+          }
+          document.removeEventListener('click', stopAlarm);
+          document.removeEventListener('keydown', stopAlarm);
+        };
+        document.addEventListener('click', stopAlarm);
+        document.addEventListener('keydown', stopAlarm);
+      } catch (err) {
+        console.error('Failed to play notification sound:', err);
+      }
+      
+      if (Notification.permission === 'granted') {
+        new Notification(`Reminder: ${data.title}`, {
+          body: `Created by ${data.senderName}`,
+          icon: '/logo.png',
+          tag: data.messageId // Prevent duplicate notifications
+        });
+      } else {
+        alert(`⏰ REMINDER: ${data.title}\nBy: ${data.senderName}`);
+      }
+    });
+
     // Cleanup
     return () => {
+      // Stop all active alarms on unmount
+      Object.values(activeAlarms.current).forEach(audio => {
+        audio.pause();
+        audio.currentTime = 0;
+      });
+      activeAlarms.current = {};
       socket.disconnect();
     };
   }, [token, addMessage, updateMessageStatus, setTypingUser, updateUserStatus, updateUser, removeUser, addUser, deleteMessage, upsertChat, currentUser]);
@@ -158,6 +225,23 @@ export const useSocket = (token) => {
   const sendMessage = useCallback((data) => {
     if (socketRef.current) {
       socketRef.current.emit('message:send', data);
+    }
+  }, []);
+
+  const completeSchedule = useCallback(async (chatId, messageId) => {
+    try {
+      // 1. Call API for absolute persistence (fallback for socket)
+      await messageAPI.completeSchedule(messageId);
+      
+      // 2. Also emit via socket for real-time sync
+      if (socketRef.current) {
+        socketRef.current.emit('message:complete_schedule', { chatId, messageId });
+      }
+      
+      // 3. Update local store immediately
+      useChatStore.getState().updateMessage(chatId, messageId, { isCompleted: true });
+    } catch (error) {
+      console.error('Failed to complete schedule:', error);
     }
   }, []);
 
@@ -185,11 +269,21 @@ export const useSocket = (token) => {
     }
   }, []);
 
+  const stopLocalAlarm = useCallback((messageId) => {
+    if (activeAlarms.current[messageId]) {
+      activeAlarms.current[messageId].pause();
+      activeAlarms.current[messageId].currentTime = 0;
+      delete activeAlarms.current[messageId];
+    }
+  }, []);
+
   return {
     socket: socketRef.current,
     joinChat,
     leaveChat,
     sendMessage,
+    completeSchedule,
+    stopLocalAlarm,
     deleteMessageSocket,
     startTyping,
     stopTyping,

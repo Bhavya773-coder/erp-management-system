@@ -52,6 +52,33 @@ router.get('/:chatId', authenticate, async (req, res) => {
   }
 });
 
+// @route   GET /api/messages/schedules/all
+// @desc    Get all schedules for current user
+// @access  Private
+router.get('/schedules/all', authenticate, async (req, res) => {
+  try {
+    // Find all chats user is part of
+    const chats = await Chat.find({ 'members.user': req.user._id });
+    const chatIds = chats.map(c => c._id);
+
+    const schedules = await Message.find({
+      chat: { $in: chatIds },
+      messageType: 'SCHEDULE',
+      isDeleted: false
+    })
+    .populate('sender', 'name')
+    .sort({ scheduleDate: 1 });
+
+    res.json({
+      success: true,
+      data: { schedules }
+    });
+  } catch (error) {
+    console.error('Get all schedules error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
 // @route   POST /api/messages
 // @desc    Send a message
 // @access  Private
@@ -99,6 +126,44 @@ router.post('/', authenticate, async (req, res) => {
     });
   } catch (error) {
     console.error('Send message error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// @route   PUT /api/messages/:id/complete
+// @desc    Mark a schedule as completed
+// @access  Private
+router.put('/:id/complete', authenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const message = await Message.findById(id);
+
+    if (!message) {
+      return res.status(404).json({ success: false, message: 'Message not found' });
+    }
+
+    if (message.messageType !== 'SCHEDULE') {
+      return res.status(400).json({ success: false, message: 'Message is not a schedule' });
+    }
+
+    message.isCompleted = true;
+    await message.save();
+
+    // Notify others via socket
+    if (req.io) {
+      req.io.to(`chat:${message.chat}`).emit('message:updated', {
+        chatId: message.chat,
+        messageId: id,
+        updates: { isCompleted: true }
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Schedule marked as completed'
+    });
+  } catch (error) {
+    console.error('Complete message error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });

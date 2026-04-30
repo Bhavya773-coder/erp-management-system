@@ -105,14 +105,20 @@ export const useChatStore = create((set, get) => ({
   deleteChat: async (chatId) => {
     try {
       await chatAPI.deleteChat(chatId);
-      set((state) => ({
-        chats: state.chats.filter(c => c.id !== chatId),
-        currentChat: state.currentChat?.id === chatId ? null : state.currentChat
-      }));
+      // No need to call deleteChatLocal here because the server 
+      // will emit 'chat:deleted' which we handle in useSocket
       return { success: true };
     } catch (error) {
       return { success: false, error: error.response?.data?.message };
     }
+  },
+
+  deleteChatLocal: (chatId) => {
+    set((state) => ({
+      chats: state.chats.filter(c => c.id !== chatId),
+      currentChat: state.currentChat?.id === chatId ? null : state.currentChat,
+      messages: state.currentChat?.id === chatId ? [] : state.messages
+    }));
   },
 
   // Message actions
@@ -206,6 +212,23 @@ export const useChatStore = create((set, get) => ({
         chats: updatedChats
       };
     });
+  },
+
+  updateMessage: (chatId, messageId, updates) => {
+    set((state) => ({
+      messages: state.messages.map(m => 
+        m.id === messageId ? { ...m, ...updates } : m
+      ),
+      chats: state.chats.map(chat => {
+        if (chat.id === chatId && chat.lastMessage?.id === messageId) {
+          return {
+            ...chat,
+            lastMessage: { ...chat.lastMessage, ...updates }
+          };
+        }
+        return chat;
+      })
+    }));
   },
 
   deleteMessage: (chatId, messageId) => {

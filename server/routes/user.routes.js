@@ -1,5 +1,7 @@
 import express from 'express';
 import User from '../models/User.js';
+import Message from '../models/Message.js';
+import Chat from '../models/Chat.js';
 import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -224,6 +226,27 @@ router.delete('/:id', authenticate, async (req, res) => {
       });
     }
 
+    // Deep cleanup start
+    // 1. Find all chats this user is part of
+    const userChats = await Chat.find({ 'members.user': id });
+    
+    for (const chat of userChats) {
+      if (chat.isGroup) {
+        // If it's a group, just remove the user from members
+        await Chat.findByIdAndUpdate(chat._id, {
+          $pull: { members: { user: id } }
+        });
+      } else {
+        // If it's individual, delete the whole chat and its messages
+        await Message.deleteMany({ chat: chat._id });
+        await Chat.findByIdAndDelete(chat._id);
+      }
+    }
+
+    // 2. Delete any orphaned messages sent by this user in other chats
+    await Message.deleteMany({ sender: id });
+
+    // 3. Finally delete the user
     const deletedUser = await User.findByIdAndDelete(id);
 
     if (!deletedUser) {

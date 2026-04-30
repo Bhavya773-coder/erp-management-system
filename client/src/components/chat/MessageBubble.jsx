@@ -1,12 +1,47 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { format } from 'date-fns';
-import { Check, CheckCheck, FileText, Download, Trash2, Ban } from 'lucide-react';
+import { format, differenceInSeconds } from 'date-fns';
+import { Check, CheckCheck, FileText, Download, Trash2, Ban, Timer, Calendar } from 'lucide-react';
 import { fileAPI } from '@/lib/api';
 
-export default function MessageBubble({ message, isOwn, showAvatar, onDelete }) {
+const Countdown = ({ targetDate }) => {
+  const [timeLeft, setTimeLeft] = useState(differenceInSeconds(new Date(targetDate), new Date()));
+
+  useEffect(() => {
+    if (timeLeft <= 0) return;
+
+    const timer = setInterval(() => {
+      const remaining = differenceInSeconds(new Date(targetDate), new Date());
+      setTimeLeft(remaining);
+      if (remaining <= 0) clearInterval(timer);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [targetDate, timeLeft]);
+
+  if (timeLeft <= 0) {
+    return <span className="text-red-500 font-bold animate-pulse">TIME ENDED!</span>;
+  }
+
+  const days = Math.floor(timeLeft / (24 * 3600));
+  const hours = Math.floor((timeLeft % (24 * 3600)) / 3600);
+  const minutes = Math.floor((timeLeft % 3600) / 60);
+  const seconds = timeLeft % 60;
+
+  return (
+    <div className="flex space-x-1 font-mono text-xs">
+      {days > 0 && <span>{days}d</span>}
+      {(days > 0 || hours > 0) && <span>{hours.toString().padStart(2, '0')}h</span>}
+      <span>{minutes.toString().padStart(2, '0')}m</span>
+      <span>{seconds.toString().padStart(2, '0')}s</span>
+    </div>
+  );
+};
+
+export default function MessageBubble({ message, isOwn, showAvatar, onDelete, onComplete, onStopAlarm }) {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [localCompleted, setLocalCompleted] = useState(false);
 
   const formatTime = (dateString) => {
     return format(new Date(dateString), 'h:mm a');
@@ -16,7 +51,7 @@ export default function MessageBubble({ message, isOwn, showAvatar, onDelete }) 
     if (message.isDeleted) return null;
     switch (message.status) {
       case 'SEEN':
-        return <CheckCheck className="w-3 h-3 text-blue-500" />;
+        return <CheckCheck className="w-3 h-3 text-whatsapp-primary" />;
       case 'DELIVERED':
         return <CheckCheck className="w-3 h-3 text-gray-400" />;
       case 'SENT':
@@ -44,6 +79,17 @@ export default function MessageBubble({ message, isOwn, showAvatar, onDelete }) 
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  const shortenFileName = (name, maxLength = 12) => {
+    if (!name) return 'File';
+    if (name.length <= maxLength + 5) return name; // e.g. short name + .pdf
+    const parts = name.split('.');
+    if (parts.length > 1) {
+      const ext = parts.pop();
+      return `${name.substring(0, maxLength)}...${ext}`;
+    }
+    return `${name.substring(0, maxLength)}...`;
+  };
+
   const handleFileDownload = async () => {
     if (message.isDeleted) return;
     
@@ -68,6 +114,73 @@ export default function MessageBubble({ message, isOwn, showAvatar, onDelete }) 
         <div className="flex items-center text-gray-400 italic text-sm py-1">
           <Ban className="w-3 h-3 mr-1" />
           <span>This message was deleted</span>
+        </div>
+      );
+    }
+
+    if (message.messageType === 'SCHEDULE') {
+      const isCompleted = message.isCompleted || localCompleted;
+      
+      return (
+        <div className={`
+          border rounded-xl p-4 min-w-[260px] shadow-sm overflow-hidden relative group/schedule transition-all
+          ${isCompleted 
+            ? 'bg-gray-50 border-gray-200 opacity-80' 
+            : 'bg-gradient-to-br from-orange-50 to-white border-orange-200'
+          }
+        `}>
+          <div className={`absolute top-0 right-0 w-16 h-16 rounded-full -mr-8 -mt-8 ${isCompleted ? 'bg-gray-200/50' : 'bg-orange-100/50'}`} />
+          
+          <div className="flex items-start justify-between mb-3 relative z-10">
+            <div className={`p-2 rounded-lg shadow-lg ${isCompleted ? 'bg-gray-400' : 'bg-orange-500'}`}>
+              <Calendar className="w-5 h-5 text-white" />
+            </div>
+            {!isCompleted && (
+              <div className="flex items-center space-x-1 bg-white px-2 py-1 rounded-full border border-orange-100 shadow-sm">
+                <Timer className="w-3 h-3 text-orange-500" />
+                <Countdown targetDate={message.scheduleDate} />
+              </div>
+            )}
+            {isCompleted && (
+               <div className="flex items-center space-x-1 bg-green-50 px-2 py-1 rounded-full border border-green-100 text-green-600 text-[10px] font-bold">
+                  <CheckCheck className="w-3 h-3" />
+                  DONE
+               </div>
+            )}
+          </div>
+          
+          <div className="relative z-10">
+            <p className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${isCompleted ? 'text-gray-500' : 'text-orange-600'}`}>
+              {isCompleted ? 'Reminder Completed' : 'Schedule Reminder'}
+            </p>
+            <h4 className={`text-sm font-bold leading-tight ${isCompleted ? 'text-gray-600 line-through' : 'text-gray-800'}`}>
+              {message.content}
+            </h4>
+            <p className="text-[10px] text-gray-500 mt-2 flex items-center">
+              {isCompleted ? 'Completed' : `Due: ${message.scheduleDate ? format(new Date(message.scheduleDate), 'MMM d, h:mm a') : 'Not set'}`}
+            </p>
+          </div>
+
+          <div className="mt-4 pt-3 border-t border-orange-100 flex items-center justify-between relative z-10">
+             {!isCompleted && !isOwn && (
+               <button 
+                onClick={() => {
+                  setLocalCompleted(true);
+                  onStopAlarm(message.id);
+                  onComplete(message.chatId, message.id);
+                }}
+                className="w-full py-2 bg-whatsapp-primary hover:bg-whatsapp-dark text-white text-xs font-bold rounded-lg shadow-md transition-all active:scale-95"
+               >
+                 Mark as Completed
+               </button>
+             )}
+             {isCompleted && (
+                <span className="text-[10px] font-medium text-gray-500 italic">Task closed</span>
+             )}
+             {!isCompleted && isOwn && (
+                <span className="text-[10px] font-medium text-orange-500">Awaiting Response</span>
+             )}
+          </div>
         </div>
       );
     }
@@ -131,7 +244,9 @@ export default function MessageBubble({ message, isOwn, showAvatar, onDelete }) 
               <FileText className="w-5 h-5 text-white" />
             </div>
             <div className="flex-1 min-w-0 mr-4">
-              <p className="text-sm font-medium truncate">{message.fileName || 'File'}</p>
+              <p className="text-sm font-medium truncate" title={message.fileName}>
+                {shortenFileName(message.fileName)}
+              </p>
               <p className="text-xs text-gray-500">{formatFileSize(message.fileSize)}</p>
             </div>
             <div className="flex space-x-1">
@@ -162,56 +277,60 @@ export default function MessageBubble({ message, isOwn, showAvatar, onDelete }) 
   };
 
   return (
-    <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'} group relative`}>
-      <div className={`flex items-end max-w-[70%] ${isOwn ? 'flex-row-reverse' : 'flex-row'}`}>
+    <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'} group relative px-0 sm:px-1`}>
+      <div className={`flex items-end max-w-[85%] sm:max-w-[70%] ${isOwn ? 'flex-row-reverse' : 'flex-row'}`}>
         {/* Avatar */}
         {!isOwn && showAvatar && (
-          <Avatar className="h-8 w-8 bg-whatsapp-primary text-white mr-2 mb-1">
+          <Avatar className="h-7 w-7 sm:h-8 sm:w-8 shrink-0 mr-2 mb-1 border-2 border-white shadow-sm">
             <AvatarImage src={getFullUrl(message.sender?.avatarUrl)} />
-            <AvatarFallback className="text-xs">
+            <AvatarFallback className="text-[10px] bg-whatsapp-primary text-white font-bold">
               {getInitials(message.sender?.name)}
             </AvatarFallback>
           </Avatar>
         )}
-        {!isOwn && !showAvatar && <div className="w-10 mr-2" />}
+        {!isOwn && !showAvatar && <div className="w-9 sm:w-10 mr-2" />}
 
         {/* Message Bubble */}
         <div className="relative group">
           <div
             className={`
-              px-3 py-2 rounded-lg shadow-sm
+              px-3 py-2 rounded-[1.25rem] shadow-sm transition-all
               ${isOwn 
-                ? 'bg-whatsapp-light rounded-br-none' 
-                : 'bg-white rounded-bl-none'
+                ? (message.messageType === 'SCHEDULE' ? 'bg-transparent shadow-none p-0' : 'bg-whatsapp-primary text-white rounded-br-none') 
+                : (message.messageType === 'SCHEDULE' ? 'bg-transparent shadow-none p-0' : 'bg-white text-gray-800 rounded-bl-none border border-gray-100')
               }
             `}
           >
             {/* Sender name for group chats */}
             {!isOwn && message.sender?.name && (
-              <p className="text-xs text-whatsapp-primary font-medium mb-1">
+              <p className="text-[10px] font-black uppercase tracking-wider text-whatsapp-primary mb-1">
                 {message.sender.name}
               </p>
             )}
 
             {/* Message Content */}
-            {renderContent()}
+            <div className="leading-relaxed">
+              {renderContent()}
+            </div>
 
             {/* Time and Status */}
-            <div className={`flex items-center mt-1 ${isOwn ? 'justify-end' : 'justify-start'}`}>
-              <span className="text-[10px] text-gray-500">
-                {formatTime(message.createdAt)}
-              </span>
-              {isOwn && (
-                <span className="ml-1">{getStatusIcon()}</span>
-              )}
-            </div>
+            {message.messageType !== 'SCHEDULE' && (
+              <div className={`flex items-center mt-1.5 space-x-1 ${isOwn ? 'justify-end' : 'justify-start'}`}>
+                <span className={`text-[9px] font-bold uppercase tracking-tighter ${isOwn ? 'text-white/70' : 'text-gray-400'}`}>
+                  {formatTime(message.createdAt)}
+                </span>
+                {isOwn && (
+                  <span className="shrink-0">{getStatusIcon()}</span>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* Delete Button for own messages */}
+          {/* Action Button - Visible on mobile, hover on desktop */}
           {isOwn && !message.isDeleted && (
             <button 
               onClick={() => onDelete(message.id)}
-              className="absolute -left-8 top-1/2 -translate-y-1/2 p-1.5 bg-white rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity text-red-500 hover:bg-red-50"
+              className="absolute -left-10 top-1/2 -translate-y-1/2 p-2 bg-white rounded-full shadow-md opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all text-red-500 hover:bg-red-50 lg:p-1.5"
               title="Delete message"
             >
               <Trash2 className="w-4 h-4" />
