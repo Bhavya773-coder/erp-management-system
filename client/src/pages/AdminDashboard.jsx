@@ -257,7 +257,7 @@ export default function AdminDashboard() {
               </ScrollArea>
             ) : (
               <div className="p-12 text-center text-gray-500">
-                <img src="/logo.jpeg" className="w-16 h-16 mx-auto mb-4 opacity-10 grayscale" alt="Logo" />
+                <img src="/logo.png" className="w-16 h-16 mx-auto mb-4 opacity-20 grayscale" alt="Logo" />
                 <p>Chat Management logic will appear here.</p>
               </div>
             )}

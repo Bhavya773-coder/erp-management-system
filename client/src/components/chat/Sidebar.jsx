@@ -300,7 +300,7 @@ export default function Sidebar({
                         <Avatar className="h-12 w-12 bg-whatsapp-primary text-white">
                           <AvatarImage src={chat.isGroup ? null : getFullUrl(otherMember?.user?.avatarUrl)} />
                           <AvatarFallback>
-                            {chat.isGroup ? <img src="/logo.jpeg" className="w-full h-full object-cover" alt="Group" /> : getInitials(chat.name)}
+                            {chat.isGroup ? <img src="/logo.png" className="w-full h-full object-contain" alt="Group" /> : getInitials(chat.name)}
                           </AvatarFallback>
                         </Avatar>
                         {!chat.isGroup && otherMember?.user.isOnline && (
