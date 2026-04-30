@@ -121,11 +121,12 @@ export const setupSocketHandlers = (io) => {
           .populate('members.user', 'name email avatarUrl isOnline lastSeen phone education skills role');
 
         // Prepare full chat object for sidebar sync
+        const validMembers = updatedChat.members.filter(m => m.user);
         const formattedChat = {
           id: updatedChat._id.toString(),
           isGroup: updatedChat.isGroup,
           name: updatedChat.name, // Will be filtered on frontend for individual
-          members: updatedChat.members.map(m => ({
+          members: validMembers.map(m => ({
             id: m._id,
             user: {
               id: m.user._id.toString(),
@@ -142,8 +143,8 @@ export const setupSocketHandlers = (io) => {
         };
 
         // Emit to all members' personal rooms
-        chat.members.forEach(member => {
-          const userId = member.user._id || member.user;
+        validMembers.forEach(member => {
+          const userId = member.user._id.toString();
           
           // Send message
           io.to(`user:${userId}`).emit('message:received', {
@@ -236,12 +237,15 @@ export const setupSocketHandlers = (io) => {
         const chat = await Chat.findById(chatId);
         if (chat) {
           chat.members.forEach(member => {
-            io.to(`user:${member.user._id || member.user}`).emit('message:status_update', {
-              chatId,
-              status: 'SEEN',
-              seenBy: socket.userId,
-              timestamp: new Date().toISOString()
-            });
+            if (member.user) {
+              const userId = member.user._id || member.user;
+              io.to(`user:${userId.toString()}`).emit('message:status_update', {
+                chatId,
+                status: 'SEEN',
+                seenBy: socket.userId,
+                timestamp: new Date().toISOString()
+              });
+            }
           });
         }
       } catch (error) {
@@ -268,10 +272,13 @@ export const setupSocketHandlers = (io) => {
           const chat = await Chat.findById(chatId);
           if (chat) {
             chat.members.forEach(member => {
-              io.to(`user:${member.user._id || member.user}`).emit('message:deleted', {
-                chatId,
-                messageId
-              });
+              if (member.user) {
+                const userId = member.user._id || member.user;
+                io.to(`user:${userId.toString()}`).emit('message:deleted', {
+                  chatId,
+                  messageId
+                });
+              }
             });
           }
         }
