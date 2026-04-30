@@ -229,8 +229,8 @@ export default function ChatWindow({
     <div className="h-full flex overflow-hidden relative w-full flex-col">
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col bg-whatsapp-gray min-w-0 h-full relative">
-        {/* Header - Sticky at top */}
-        <div className="sticky top-0 z-20 flex flex-col bg-white/80 backdrop-blur-md border-b border-gray-100 shrink-0">
+        {/* Header */}
+        <div className="z-20 flex flex-col bg-white/80 backdrop-blur-md border-b border-gray-100 shrink-0">
           <div className="flex items-center p-2 sm:p-4">
             <div 
               className="flex items-center flex-1 min-w-0 cursor-pointer hover:bg-gray-100/50 p-1 rounded-2xl transition-all"
@@ -372,8 +372,8 @@ export default function ChatWindow({
           </div>
         </div>
 
-        {/* Input Footer Area - Sticky at bottom */}
-        <div className="sticky bottom-0 z-20 p-2 sm:p-4 bg-white/80 backdrop-blur-md border-t border-gray-100 shrink-0">
+        {/* Input Footer Area */}
+        <div className="z-20 p-2 sm:p-4 bg-white/80 backdrop-blur-md border-t border-gray-100 shrink-0">
           {showPinMenu && (
             <div className="absolute bottom-full left-4 mb-4 bg-white rounded-3xl shadow-2xl border border-gray-100 p-3 animate-in slide-in-from-bottom-4 duration-300 z-50 min-w-[240px] overflow-hidden">
               <button 
