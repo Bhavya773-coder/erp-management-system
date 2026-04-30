@@ -19,7 +19,9 @@ router.get('/', authenticate, async (req, res) => {
     .sort({ updatedAt: -1 });
 
     const formattedChats = await Promise.all(chats.map(async (chat) => {
-      const otherMembers = chat.members.filter(m => m.user._id.toString() !== req.user._id.toString());
+      // Filter out members where user might be null (deleted)
+      const validMembers = chat.members.filter(m => m.user);
+      const otherMembers = validMembers.filter(m => m.user._id.toString() !== req.user._id.toString());
       
       // Get last message
       const lastMessage = await Message.findOne({ chat: chat._id })
@@ -37,7 +39,7 @@ router.get('/', authenticate, async (req, res) => {
         id: chat._id.toString(),
         isGroup: chat.isGroup,
         name: chat.isGroup ? chat.name : (otherMembers[0]?.user?.name || 'Unknown'),
-        members: chat.members.map(m => ({
+        members: validMembers.map(m => ({
           id: m._id,
           user: {
             id: m.user._id,
@@ -59,10 +61,10 @@ router.get('/', authenticate, async (req, res) => {
           messageType: lastMessage.messageType,
           status: lastMessage.status,
           createdAt: lastMessage.createdAt,
-          sender: {
+          sender: lastMessage.sender ? {
             id: lastMessage.sender._id,
             name: lastMessage.sender.name
-          }
+          } : { id: 'unknown', name: 'Deleted User' }
         } : null,
         unreadCount,
         createdAt: chat.createdAt
@@ -112,12 +114,13 @@ router.post('/individual', authenticate, async (req, res) => {
 
     chat = await Chat.findById(chat._id).populate('members.user', 'name email phone avatarUrl isOnline lastSeen education skills role');
 
-    const otherMembers = chat.members.filter(m => m.user._id.toString() !== req.user._id.toString());
+    const validMembers = chat.members.filter(m => m.user);
+    const otherMembers = validMembers.filter(m => m.user._id.toString() !== req.user._id.toString());
     const formattedChat = {
       id: chat._id.toString(),
       isGroup: chat.isGroup,
       name: chat.isGroup ? chat.name : (otherMembers[0]?.user?.name || 'Unknown'),
-      members: chat.members.map(m => ({
+      members: validMembers.map(m => ({
         id: m._id,
         user: {
           id: m.user._id,
@@ -233,12 +236,13 @@ router.get('/:id', authenticate, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Chat not found' });
     }
 
-    const otherMembers = chat.members.filter(m => m.user._id.toString() !== req.user._id.toString());
+    const validMembers = chat.members.filter(m => m.user);
+    const otherMembers = validMembers.filter(m => m.user._id.toString() !== req.user._id.toString());
     const formattedChat = {
       id: chat._id.toString(),
       isGroup: chat.isGroup,
       name: chat.isGroup ? chat.name : (otherMembers[0]?.user?.name || 'Unknown'),
-      members: chat.members.map(m => ({
+      members: validMembers.map(m => ({
         id: m._id,
         user: {
           id: m.user._id,
@@ -271,11 +275,11 @@ router.get('/:id', authenticate, async (req, res) => {
       fileSize: m.fileSize,
       status: m.status,
       createdAt: m.createdAt,
-      senderId: m.sender._id.toString(),
-      sender: {
+      senderId: m.sender ? m.sender._id.toString() : 'unknown',
+      sender: m.sender ? {
         id: m.sender._id.toString(),
         name: m.sender.name
-      }
+      } : { id: 'unknown', name: 'Deleted User' }
     }));
 
     res.json({ success: true, data: { chat: formattedChat, messages: formattedMessages } });
