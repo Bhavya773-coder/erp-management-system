@@ -1,0 +1,7 @@
+{
+  "name": "arcadian-works-erp",
+  "private": true,
+  "scripts": {
+    "build": "cd client && npm install && npm run build"
+  }
+}
