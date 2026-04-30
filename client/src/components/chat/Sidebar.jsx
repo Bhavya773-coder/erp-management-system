@@ -163,25 +163,77 @@ export default function Sidebar({
         </div>
       </div>
 
-      {/* Action Buttons */}
-      <div className="p-3 border-b border-gray-100 flex space-x-2">
-        <Button 
-          variant="outline" 
-          className="flex-1 text-sm"
-          onClick={() => setShowNewChat(!showNewChat)}
-        >
-          <Plus className="w-4 h-4 mr-1" />
-          {t.newChat}
-        </Button>
-        <Button 
-          variant="outline" 
-          className="flex-1 text-sm"
-          onClick={onCreateGroup}
-        >
-          <Users className="w-4 h-4 mr-1" />
-          {t.newGroup}
-        </Button>
+      {/* Action Buttons & Tabs */}
+      <div className="p-3 border-b border-gray-100">
+        <div className="flex space-x-2 mb-3">
+          <Button 
+            variant="outline" 
+            className="flex-1 text-xs h-8"
+            onClick={() => setShowNewChat(!showNewChat)}
+          >
+            <Plus className="w-3 h-3 mr-1" />
+            {t.newChat}
+          </Button>
+          <Button 
+            variant="outline" 
+            className="flex-1 text-xs h-8"
+            onClick={onCreateGroup}
+          >
+            <Users className="w-3 h-3 mr-1" />
+            {t.newGroup}
+          </Button>
+        </div>
+        
+        <div className="flex bg-gray-100 p-1 rounded-lg">
+          <button 
+            onClick={() => setShowNewChat(false)}
+            className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${!showNewChat ? 'bg-white shadow-sm text-whatsapp-primary' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            {t.chats || 'Chats'}
+          </button>
+          <button 
+            onClick={() => setShowNewChat(true)}
+            className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all relative ${showNewChat ? 'bg-white shadow-sm text-whatsapp-primary' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            {t.directory || 'Directory'}
+            {users.filter(u => u.isOnline).length > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500 border border-white"></span>
+              </span>
+            )}
+          </button>
+        </div>
       </div>
+
+      {/* Online Now - Horizontal List (Only in Chats tab) */}
+      {!showNewChat && users.some(u => u.isOnline) && (
+        <div className="py-3 border-b border-gray-50">
+          <p className="px-4 text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Online Now</p>
+          <ScrollArea className="w-full" orientation="horizontal">
+            <div className="flex space-x-4 px-4 pb-2">
+              {users.filter(u => u.isOnline).map(user => (
+                <button 
+                  key={user.id} 
+                  onClick={() => onCreateChat(user.id)}
+                  className="flex flex-col items-center space-y-1 min-w-[50px]"
+                >
+                  <div className="relative">
+                    <Avatar className="h-10 w-10 border-2 border-green-500 p-0.5">
+                      <AvatarImage src={getFullUrl(user.avatarUrl)} className="rounded-full" />
+                      <AvatarFallback className="text-[10px]">{getInitials(user.name)}</AvatarFallback>
+                    </Avatar>
+                    <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 border-2 border-white rounded-full"></div>
+                  </div>
+                  <p className="text-[10px] font-medium text-gray-600 truncate w-12 text-center">
+                    {user.name.split(' ')[0]}
+                  </p>
+                </button>
+              ))}
+            </div>
+          </ScrollArea>
+        </div>
+      )}
 
       {/* Chat List */}
       <ScrollArea className="flex-1">
