@@ -53,7 +53,7 @@ export const useSocket = (token) => {
         if (Notification.permission === 'granted') {
           const notification = new Notification(`New message from ${message.sender?.name || 'Someone'}`, {
             body: message.messageType === 'TEXT' ? message.content : `Sent a ${message.messageType.toLowerCase()}`,
-            icon: '/logo192.png' // Adjust to your actual logo path
+            icon: '/logo.png' // Updated to the official transparent logo
           });
 
           notification.onclick = () => {

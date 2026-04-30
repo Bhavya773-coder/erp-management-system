@@ -9,7 +9,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'logo.png', 'mask-icon.svg'],
+      includeAssets: ['logo.png'],
       manifest: {
         name: 'Arcadian Works ERP',
         short_name: 'Arcadia ERP',
