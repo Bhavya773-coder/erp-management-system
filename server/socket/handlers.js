@@ -170,7 +170,7 @@ export const setupSocketHandlers = (io) => {
                 body: formattedMessage.messageType === 'TEXT' ? formattedMessage.content : `Sent a ${formattedMessage.messageType.toLowerCase()}`,
                 icon: '/logo.png',
                 badge: '/logo.png',
-                tag: formattedMessage.chatId,
+                tag: formattedMessage.id, // Unique tag for every message
                 renotify: true,
                 data: { 
                   chatId: formattedMessage.chatId, 

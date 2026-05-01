@@ -12,7 +12,7 @@ self.addEventListener('push', (event) => {
       body: data.body || 'New message received',
       icon: data.icon || '/logo.png',
       badge: data.badge || '/logo.png',
-      tag: data.tag || 'new-message',
+      tag: data.id || data.tag || Math.random().toString(), // Force unique tag
       renotify: true,
       vibrate: [200, 100, 200],
       data: {

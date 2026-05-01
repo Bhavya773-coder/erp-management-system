@@ -111,7 +111,7 @@ export const useSocket = (token) => {
             body: message.messageType === 'TEXT' ? message.content : `Sent a ${message.messageType.toLowerCase()}`,
             icon: '/logo.png',
             badge: '/logo.png',
-            tag: message.chatId,
+            tag: message.id, // Unique tag for every message
             renotify: true,
             vibrate: [200, 100, 200],
             data: { url: '/' }
