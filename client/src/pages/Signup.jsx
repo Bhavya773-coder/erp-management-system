@@ -7,8 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { MessageSquare, Loader2, Upload, Eye, EyeOff } from 'lucide-react';
-import { fileAPI } from '@/lib/api';
+import { MessageSquare, Loader2, Eye, EyeOff } from 'lucide-react';
 
 export default function Signup() {
   const [formData, setFormData] = useState({
@@ -22,8 +21,6 @@ export default function Signup() {
     skills: '',
   });
   const [showPassword, setShowPassword] = useState(false);
-  const [aadhaarFront, setAadhaarFront] = useState(null);
-  const [aadhaarBack, setAadhaarBack] = useState(null);
   
   const { signup, isLoading } = useAuthStore();
   const { toast } = useToast();
@@ -33,35 +30,15 @@ export default function Signup() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleFileChange = (e, type) => {
-    const file = e.target.files[0];
-    if (type === 'front') {
-      setAadhaarFront(file);
-    } else {
-      setAadhaarBack(file);
-    }
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     
     try {
-      let aadhaarFrontImage = null;
-      let aadhaarBackImage = null;
-      
-      if (aadhaarFront || aadhaarBack) {
-        const uploadResponse = await fileAPI.uploadAadhaar(aadhaarFront, aadhaarBack);
-        aadhaarFrontImage = uploadResponse.data.data.aadhaarFrontImage;
-        aadhaarBackImage = uploadResponse.data.data.aadhaarBackImage;
-      }
-
       const skillsArray = formData.skills.split(',').map(s => s.trim()).filter(Boolean);
 
       const userData = {
         ...formData,
         skills: skillsArray,
-        aadhaarFrontImage,
-        aadhaarBackImage,
       };
 
       const result = await signup(userData);
@@ -202,35 +179,6 @@ export default function Signup() {
                     <SelectItem value="EMPLOYEE">Employee</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              <div className="space-y-2.5">
-                <Label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] px-2">Aadhaar Front Image</Label>
-                <div className="relative">
-                  <Input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => handleFileChange(e, 'front')}
-                    required
-                    className="h-12 rounded-xl bg-gray-50/50 border-transparent focus:bg-white focus:border-whatsapp-primary px-5 pt-2 transition-all cursor-pointer"
-                  />
-                  <Upload className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                </div>
-              </div>
-              <div className="space-y-2.5">
-                <Label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] px-2">Aadhaar Back Image</Label>
-                <div className="relative">
-                  <Input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => handleFileChange(e, 'back')}
-                    required
-                    className="h-12 rounded-xl bg-gray-50/50 border-transparent focus:bg-white focus:border-whatsapp-primary px-5 pt-2 transition-all cursor-pointer"
-                  />
-                  <Upload className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                </div>
               </div>
             </div>
 
