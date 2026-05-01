@@ -6,11 +6,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { MessageSquare, Loader2 } from 'lucide-react';
+import { MessageSquare, Loader2, Eye, EyeOff } from 'lucide-react';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const { login, isLoading } = useAuthStore();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -46,7 +47,7 @@ export default function Login() {
               <img src="/logo.png" alt="Arcadian Logo" className="w-full h-full object-contain" />
             </div>
           </div>
-          <CardTitle className="text-3xl font-black text-gray-900 tracking-tight">Identity Access</CardTitle>
+          <CardTitle className="text-3xl font-black text-gray-900 tracking-tight">Login</CardTitle>
           <CardDescription className="text-sm font-medium text-gray-500 uppercase tracking-widest mt-2">
             Arcadian Works ERP
           </CardDescription>
@@ -55,11 +56,11 @@ export default function Login() {
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-6 px-8">
             <div className="space-y-3">
-              <Label htmlFor="email" className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] px-2">Corporate Email</Label>
+              <Label htmlFor="email" className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] px-2">Email Address</Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="user@arcadian.com"
+                placeholder="user@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -68,17 +69,26 @@ export default function Login() {
             </div>
             <div className="space-y-3">
               <div className="flex items-center justify-between px-2">
-                <Label htmlFor="password" className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Security Key</Label>
+                <Label htmlFor="password" className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Password</Label>
               </div>
-              <Input
-                id="password"
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="h-14 rounded-2xl bg-gray-50/50 border-transparent focus:bg-white focus:border-blue-500 transition-all px-6"
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="h-14 rounded-2xl bg-gray-50/50 border-transparent focus:bg-white focus:border-whatsapp-primary transition-all px-6"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-whatsapp-primary transition-colors"
+                >
+                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
+              </div>
             </div>
           </CardContent>
           <CardFooter className="flex flex-col space-y-6 p-8">
@@ -90,16 +100,16 @@ export default function Login() {
               {isLoading ? (
                 <>
                   <Loader2 className="mr-3 h-5 w-5 animate-spin" />
-                  AUTHENTICATING...
+                  LOGGING IN...
                 </>
               ) : (
-                'SIGN IN'
+                'LOGIN'
               )}
             </Button>
             <p className="text-sm text-gray-400 text-center font-medium">
-              New to the platform?{' '}
+              New here?{' '}
               <Link to="/signup" className="text-whatsapp-primary hover:underline font-bold">
-                Request Access
+                Create Account
               </Link>
             </p>
           </CardFooter>
