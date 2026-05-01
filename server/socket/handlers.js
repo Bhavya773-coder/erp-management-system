@@ -1,7 +1,7 @@
 import User from '../models/User.js';
 import Chat from '../models/Chat.js';
 import Message from '../models/Message.js';
-import { sendPushNotification } from '../services/pushService.js';
+import { sendPushNotification } from '../utils/pushNotification.js';
 
 // Store connected users: { userId: socketId }
 const connectedUsers = new Map();
@@ -122,7 +122,7 @@ export const setupSocketHandlers = (io) => {
 
         // Update chat updatedAt
         const updatedChat = await Chat.findByIdAndUpdate(chatId, { updatedAt: Date.now() }, { new: true })
-          .populate('members.user', 'name email avatarUrl isOnline lastSeen phone education skills role pushSubscriptions');
+          .populate('members.user', 'name email avatarUrl isOnline lastSeen phone education skills role pushSubscription');
 
         // Prepare full chat object for sidebar sync
         const validMembers = updatedChat.members.filter(m => m.user);
@@ -150,7 +150,7 @@ export const setupSocketHandlers = (io) => {
         validMembers.forEach(member => {
           const userId = member.user._id.toString();
           
-          // Send message
+          // Send message via socket
           io.to(`user:${userId}`).emit('message:received', {
             message: formattedMessage
           });
@@ -162,14 +162,26 @@ export const setupSocketHandlers = (io) => {
           
           // Send push notification to other users
           if (userId !== socket.userId) {
-            const pushPayload = {
-              title: `New Message from ${formattedMessage.sender.name}`,
-              body: formattedMessage.messageType === 'FILE' ? `File: ${formattedMessage.fileName}` :
-                    formattedMessage.messageType === 'IMAGE' ? 'Image' :
-                    formattedMessage.content || 'New Message',
-              url: `/chat`
-            };
-            sendPushNotification(member.user, pushPayload).catch(err => console.error(err));
+            const pushSubscription = member.user.pushSubscription;
+            
+            if (pushSubscription) {
+              const pushPayload = {
+                title: `New message from ${formattedMessage.sender.name}`,
+                body: formattedMessage.messageType === 'TEXT' ? formattedMessage.content : `Sent a ${formattedMessage.messageType.toLowerCase()}`,
+                icon: '/pwa-192x192.png',
+                badge: '/pwa-192x192.png',
+                tag: formattedMessage.chatId,
+                renotify: true,
+                data: { chatId: formattedMessage.chatId, url: '/' }
+              };
+              
+              // Fire and forget push notification
+              sendPushNotification(pushSubscription, pushPayload).then(result => {
+                if (result.expired) {
+                  User.findByIdAndUpdate(userId, { pushSubscription: null }).exec();
+                }
+              }).catch(err => console.error('Push send failed:', err));
+            }
           }
         });
 

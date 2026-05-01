@@ -13,15 +13,9 @@ const userSchema = new mongoose.Schema({
   education: { type: String },
   skills: [{ type: String }],
   avatarUrl: { type: String },
+  pushSubscription: { type: Object, default: null },
   isOnline: { type: Boolean, default: false },
   lastSeen: { type: Date, default: Date.now },
-  pushSubscriptions: [{
-    endpoint: String,
-    keys: {
-      p256dh: String,
-      auth: String
-    }
-  }],
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });

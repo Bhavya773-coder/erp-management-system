@@ -188,4 +188,28 @@ router.get('/me', async (req, res) => {
   }
 });
 
+// @route   POST /api/auth/push-subscription
+// @desc    Save push subscription for current user
+// @access  Private
+router.post('/push-subscription', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ success: false, message: 'No token provided' });
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const { subscription } = req.body;
+
+    if (!subscription) {
+      return res.status(400).json({ success: false, message: 'Subscription is required' });
+    }
+
+    await User.findByIdAndUpdate(decoded.userId, { pushSubscription: subscription });
+
+    res.json({ success: true, message: 'Push subscription saved successfully' });
+  } catch (error) {
+    console.error('Push subscription error:', error);
+    res.status(401).json({ success: false, message: 'Invalid or expired token' });
+  }
+});
+
 export default router;

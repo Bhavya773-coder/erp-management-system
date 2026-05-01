@@ -37,6 +37,9 @@ export default defineConfig({
           }
         ]
       },
+      workbox: {
+        importScripts: ['/sw-custom.js']
+      },
       devOptions: {
         enabled: true,
         type: 'module'

@@ -5,12 +5,60 @@ import { useAuthStore } from '@/store/authStore';
 import { messageAPI } from '@/lib/api';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
+// Helper to convert VAPID key
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding)
+    .replace(/\-/g, '+')
+    .replace(/_/g, '/');
+
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
 
 export const useSocket = (token) => {
   const socketRef = useRef(null);
   const { addMessage, updateMessageStatus, setTypingUser, updateUserStatus, updateUser, removeUser, addUser, deleteMessage, upsertChat } = useChatStore();
   const { user: currentUser } = useAuthStore();
   const activeAlarms = useRef({});
+
+  const subscribeToPush = useCallback(async () => {
+    try {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        console.warn('Push messaging is not supported');
+        return;
+      }
+
+      const registration = await navigator.serviceWorker.ready;
+      
+      // Subscribe to push
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(import.meta.env.VITE_VAPID_PUBLIC_KEY)
+      });
+
+      // Send to backend
+      await fetch(`${API_URL}/auth/push-subscription`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ subscription })
+      });
+
+      console.log('✅ Push subscription synced with server');
+    } catch (error) {
+      console.error('❌ Push subscription failed:', error);
+    }
+  }, [token]);
 
   useEffect(() => {
     if (!token) return;
@@ -26,6 +74,15 @@ export const useSocket = (token) => {
     // Connection events
     socket.on('connect', () => {
       console.log('🔌 Socket connected:', socket.id);
+      
+      // Request/Verify Push Notification permission
+      if (Notification.permission === 'default') {
+        Notification.requestPermission().then(permission => {
+          if (permission === 'granted') subscribeToPush();
+        });
+      } else if (Notification.permission === 'granted') {
+        subscribeToPush();
+      }
     });
 
     socket.on('disconnect', (reason) => {
@@ -35,11 +92,6 @@ export const useSocket = (token) => {
     socket.on('connect_error', (error) => {
       console.error('Socket connection error:', error.message);
     });
-
-    // Request notification permission
-    if (Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
 
     // Message events
     socket.on('message:received', ({ message }) => {
@@ -53,34 +105,25 @@ export const useSocket = (token) => {
 
       if ((isWindowHidden || isDifferentChat) && message.senderId !== (currentUser?.id || currentUser?._id)) {
         // Play a subtle notification sound
-        const audio = new Audio('/alarm.wav'); // Reusing alarm.wav or could use a shorter ping
+        const audio = new Audio('/alarm.wav');
         audio.volume = 0.5;
         audio.play().catch(() => {});
 
         if (Notification.permission === 'granted') {
+          // Standard Browser Notification (for when app is in foreground but window is hidden/different chat)
           const notification = new Notification(`New message from ${message.sender?.name || 'Someone'}`, {
             body: message.messageType === 'TEXT' ? message.content : `Sent a ${message.messageType.toLowerCase()}`,
-            icon: '/logo.png' // Updated to the official transparent logo
+            icon: '/pwa-192x192.png',
+            badge: '/pwa-192x192.png',
+            tag: message.chatId,
+            renotify: true,
+            vibrate: [200, 100, 200],
+            data: { url: '/' }
           });
 
           notification.onclick = () => {
             window.focus();
-            // Optional: navigate to chat
           };
-        } else {
-          // Fallback for users who didn't allow notifications
-          toast({
-            title: `New message from ${message.sender?.name || 'Someone'}`,
-            description: message.messageType === 'TEXT' ? message.content : `Sent a ${message.messageType.toLowerCase()}`,
-            action: (
-              <button 
-                onClick={() => window.focus()} 
-                className="bg-whatsapp-primary text-white px-3 py-1 rounded-md text-xs font-bold"
-              >
-                VIEW
-              </button>
-            ),
-          });
         }
       }
 
@@ -94,7 +137,6 @@ export const useSocket = (token) => {
     });
 
     socket.on('message:sent', ({ message }) => {
-      console.log('✉️ Message sent confirmation:', message);
       addMessage(message);
     });
 
@@ -109,7 +151,6 @@ export const useSocket = (token) => {
     socket.on('message:updated', ({ chatId, messageId, updates }) => {
       useChatStore.getState().updateMessage(chatId, messageId, updates);
       
-      // If marked as completed, stop the alarm for this message
       if (updates.isCompleted && activeAlarms.current[messageId]) {
         activeAlarms.current[messageId].pause();
         activeAlarms.current[messageId].currentTime = 0;
@@ -118,13 +159,10 @@ export const useSocket = (token) => {
     });
 
     socket.on('chat:updated', ({ chat }) => {
-      console.log('🔄 Chat updated:', chat.id);
       upsertChat(chat);
     });
 
     socket.on('chat:deleted', ({ chatId }) => {
-      console.log('🗑️ Chat deleted for everyone:', chatId);
-      // We'll add this method to the store to handle local removal
       useChatStore.getState().deleteChatLocal(chatId);
     });
 
@@ -143,53 +181,38 @@ export const useSocket = (token) => {
     });
 
     socket.on('user:created', ({ user }) => {
-      console.log('🆕 User created:', user.name);
       addUser(user);
     });
 
     socket.on('user:updated', ({ userId, updates }) => {
-      console.log('👤 User updated:', userId, updates);
       updateUser(userId, updates);
-      
-      // If it's the current user, update auth store too
       if (userId === (currentUser?.id || currentUser?._id)) {
         useAuthStore.getState().updateUser(updates);
       }
     });
 
     socket.on('user:role_updated', ({ role }) => {
-      console.log('🎖️ Role updated to:', role);
       useAuthStore.getState().updateUser({ role });
-      // Optional: Show a toast or notification
     });
 
     socket.on('user:deleted_self', () => {
-      console.log('🚫 Account deleted, logging out...');
       useAuthStore.getState().logout();
       window.location.href = '/login';
     });
 
     socket.on('user:deleted', ({ userId }) => {
-      console.log('🗑️ User deleted:', userId);
       removeUser(userId);
     });
 
     socket.on('notification:schedule_due', (data) => {
-      console.log('⏰ Schedule due notification:', data);
-      
-      // If already completed, don't ring
       if (data.isCompleted) return;
 
-      // Play notification sound in a loop
       try {
         const audio = new Audio('/alarm.wav');
         audio.loop = true;
-        audio.play().catch(e => console.log('Audio play failed:', e));
-        
-        // Track this alarm
+        audio.play().catch(() => {});
         activeAlarms.current[data.messageId] = audio;
 
-        // Stop the "alarm" when any key is pressed or clicked
         const stopAlarm = () => {
           if (activeAlarms.current[data.messageId]) {
             audio.pause();
@@ -208,17 +231,13 @@ export const useSocket = (token) => {
       if (Notification.permission === 'granted') {
         new Notification(`Reminder: ${data.title}`, {
           body: `Created by ${data.senderName}`,
-          icon: '/logo.png',
-          tag: data.messageId // Prevent duplicate notifications
+          icon: '/pwa-192x192.png',
+          tag: data.messageId
         });
-      } else {
-        alert(`⏰ REMINDER: ${data.title}\nBy: ${data.senderName}`);
       }
     });
 
-    // Cleanup
     return () => {
-      // Stop all active alarms on unmount
       Object.values(activeAlarms.current).forEach(audio => {
         audio.pause();
         audio.currentTime = 0;
@@ -226,38 +245,25 @@ export const useSocket = (token) => {
       activeAlarms.current = {};
       socket.disconnect();
     };
-  }, [token, addMessage, updateMessageStatus, setTypingUser, updateUserStatus, updateUser, removeUser, addUser, deleteMessage, upsertChat, currentUser]);
+  }, [token, addMessage, updateMessageStatus, setTypingUser, updateUserStatus, updateUser, removeUser, addUser, deleteMessage, upsertChat, currentUser, subscribeToPush]);
 
   // Socket actions
   const joinChat = useCallback((chatId) => {
-    if (socketRef.current) {
-      socketRef.current.emit('chat:join', { chatId });
-    }
+    if (socketRef.current) socketRef.current.emit('chat:join', { chatId });
   }, []);
 
   const leaveChat = useCallback((chatId) => {
-    if (socketRef.current) {
-      socketRef.current.emit('chat:leave', { chatId });
-    }
+    if (socketRef.current) socketRef.current.emit('chat:leave', { chatId });
   }, []);
 
   const sendMessage = useCallback((data) => {
-    if (socketRef.current) {
-      socketRef.current.emit('message:send', data);
-    }
+    if (socketRef.current) socketRef.current.emit('message:send', data);
   }, []);
 
   const completeSchedule = useCallback(async (chatId, messageId) => {
     try {
-      // 1. Call API for absolute persistence (fallback for socket)
       await messageAPI.completeSchedule(messageId);
-      
-      // 2. Also emit via socket for real-time sync
-      if (socketRef.current) {
-        socketRef.current.emit('message:complete_schedule', { chatId, messageId });
-      }
-      
-      // 3. Update local store immediately
+      if (socketRef.current) socketRef.current.emit('message:complete_schedule', { chatId, messageId });
       useChatStore.getState().updateMessage(chatId, messageId, { isCompleted: true });
     } catch (error) {
       console.error('Failed to complete schedule:', error);
@@ -265,27 +271,19 @@ export const useSocket = (token) => {
   }, []);
 
   const deleteMessageSocket = useCallback((chatId, messageId) => {
-    if (socketRef.current) {
-      socketRef.current.emit('message:delete', { chatId, messageId });
-    }
+    if (socketRef.current) socketRef.current.emit('message:delete', { chatId, messageId });
   }, []);
 
   const startTyping = useCallback((chatId) => {
-    if (socketRef.current) {
-      socketRef.current.emit('typing:start', { chatId });
-    }
+    if (socketRef.current) socketRef.current.emit('typing:start', { chatId });
   }, []);
 
   const stopTyping = useCallback((chatId) => {
-    if (socketRef.current) {
-      socketRef.current.emit('typing:stop', { chatId });
-    }
+    if (socketRef.current) socketRef.current.emit('typing:stop', { chatId });
   }, []);
 
   const markMessagesSeen = useCallback((chatId) => {
-    if (socketRef.current) {
-      socketRef.current.emit('message:seen', { chatId });
-    }
+    if (socketRef.current) socketRef.current.emit('message:seen', { chatId });
   }, []);
 
   const stopLocalAlarm = useCallback((messageId) => {
@@ -307,5 +305,6 @@ export const useSocket = (token) => {
     startTyping,
     stopTyping,
     markMessagesSeen,
+    subscribeToPush
   };
 };
