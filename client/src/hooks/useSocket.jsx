@@ -35,17 +35,20 @@ export const useSocket = (token) => {
         return;
       }
 
+      console.log('🔄 Syncing push subscription...');
       const registration = await navigator.serviceWorker.ready;
       
-      // Get existing subscription or create new one
-      let subscription = await registration.pushManager.getSubscription();
-      
-      if (!subscription) {
-        subscription = await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(import.meta.env.VITE_VAPID_PUBLIC_KEY)
-        });
+      // Force fresh subscription to avoid VAPID key mismatch issues
+      const existingSubscription = await registration.pushManager.getSubscription();
+      if (existingSubscription) {
+        await existingSubscription.unsubscribe();
+        console.log('🗑️ Unsubscribed old push token');
       }
+      
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(import.meta.env.VITE_VAPID_PUBLIC_KEY)
+      });
 
       // Send to backend using authAPI
       await authAPI.subscribeToPush(subscription);
