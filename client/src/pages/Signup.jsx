@@ -230,7 +230,7 @@ export default function Signup() {
                   PROCESSING REQUEST...
                 </>
               ) : (
-                'INITIALIZE ACCESS'
+                'CREATE ACCOUNT'
               )}
             </Button>
             <p className="text-sm text-gray-400 text-center font-medium">
