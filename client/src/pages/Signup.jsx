@@ -187,7 +187,7 @@ export default function Signup() {
                     <SelectValue placeholder="Position" />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl border-gray-100">
-                    <SelectItem value="EMPLOYEE">Standard Employee</SelectItem>
+                    <SelectItem value="EMPLOYEE">Employee</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
