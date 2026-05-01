@@ -2,10 +2,9 @@ import { useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import { useChatStore } from '@/store/chatStore';
 import { useAuthStore } from '@/store/authStore';
-import { messageAPI } from '@/lib/api';
+import { messageAPI, authAPI } from '@/lib/api';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 // Helper to convert VAPID key
 function urlBase64ToUint8Array(base64String) {
@@ -38,27 +37,23 @@ export const useSocket = (token) => {
 
       const registration = await navigator.serviceWorker.ready;
       
-      // Subscribe to push
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(import.meta.env.VITE_VAPID_PUBLIC_KEY)
-      });
+      // Get existing subscription or create new one
+      let subscription = await registration.pushManager.getSubscription();
+      
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(import.meta.env.VITE_VAPID_PUBLIC_KEY)
+        });
+      }
 
-      // Send to backend
-      await fetch(`${API_URL}/auth/push-subscription`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ subscription })
-      });
-
+      // Send to backend using authAPI
+      await authAPI.subscribeToPush(subscription);
       console.log('✅ Push subscription synced with server');
     } catch (error) {
       console.error('❌ Push subscription failed:', error);
     }
-  }, [token]);
+  }, []);
 
   useEffect(() => {
     if (!token) return;
@@ -103,18 +98,19 @@ export const useSocket = (token) => {
       const isWindowHidden = document.visibilityState === 'hidden';
       const isDifferentChat = currentChat?.id !== message.chatId;
 
+      // Aggressive notification check for debugging
       if ((isWindowHidden || isDifferentChat) && message.senderId !== (currentUser?.id || currentUser?._id)) {
-        // Play a subtle notification sound
+        // Play notification sound
         const audio = new Audio('/alarm.wav');
         audio.volume = 0.5;
         audio.play().catch(() => {});
 
         if (Notification.permission === 'granted') {
-          // Standard Browser Notification (for when app is in foreground but window is hidden/different chat)
+          // Foreground notification
           const notification = new Notification(`New message from ${message.sender?.name || 'Someone'}`, {
             body: message.messageType === 'TEXT' ? message.content : `Sent a ${message.messageType.toLowerCase()}`,
-            icon: '/pwa-192x192.png',
-            badge: '/pwa-192x192.png',
+            icon: '/logo.png',
+            badge: '/logo.png',
             tag: message.chatId,
             renotify: true,
             vibrate: [200, 100, 200],

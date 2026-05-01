@@ -168,19 +168,27 @@ export const setupSocketHandlers = (io) => {
               const pushPayload = {
                 title: `New message from ${formattedMessage.sender.name}`,
                 body: formattedMessage.messageType === 'TEXT' ? formattedMessage.content : `Sent a ${formattedMessage.messageType.toLowerCase()}`,
-                icon: '/pwa-192x192.png',
-                badge: '/pwa-192x192.png',
+                icon: '/logo.png',
+                badge: '/logo.png',
                 tag: formattedMessage.chatId,
                 renotify: true,
-                data: { chatId: formattedMessage.chatId, url: '/' }
+                data: { 
+                  chatId: formattedMessage.chatId, 
+                  url: '/' 
+                }
               };
               
-              // Fire and forget push notification
+              console.log(`📡 Sending push to user ${userId}...`);
               sendPushNotification(pushSubscription, pushPayload).then(result => {
                 if (result.expired) {
+                  console.log(`⚠️ Push subscription expired for user ${userId}, clearing...`);
                   User.findByIdAndUpdate(userId, { pushSubscription: null }).exec();
+                } else if (result.success) {
+                  console.log(`✅ Push sent successfully to user ${userId}`);
                 }
-              }).catch(err => console.error('Push send failed:', err));
+              }).catch(err => console.error(`❌ Push send failed for user ${userId}:`, err));
+            } else {
+              console.log(`ℹ️ No push subscription found for user ${userId}`);
             }
           }
         });
