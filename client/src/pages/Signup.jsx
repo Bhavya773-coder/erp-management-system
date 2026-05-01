@@ -177,13 +177,14 @@ export default function Signup() {
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div className="space-y-2.5">
-                <Label htmlFor="aadhaarNumber" className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] px-2">Aadhaar (Optional)</Label>
+                <Label htmlFor="aadhaarNumber" className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] px-2">Aadhaar Number</Label>
                 <Input
                   id="aadhaarNumber"
                   name="aadhaarNumber"
                   placeholder="1234 5678 9012"
                   value={formData.aadhaarNumber}
                   onChange={handleChange}
+                  required
                   className="h-12 rounded-xl bg-gray-50/50 border-transparent focus:bg-white focus:border-whatsapp-primary px-5 transition-all"
                 />
               </div>
@@ -192,6 +193,7 @@ export default function Signup() {
                 <Select 
                   value={formData.role} 
                   onValueChange={(value) => setFormData({ ...formData, role: value })}
+                  required
                 >
                   <SelectTrigger className="h-12 rounded-xl bg-gray-50/50 border-transparent focus:bg-white focus:ring-0 focus:border-whatsapp-primary px-5">
                     <SelectValue placeholder="Position" />
@@ -203,6 +205,35 @@ export default function Signup() {
               </div>
             </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div className="space-y-2.5">
+                <Label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] px-2">Aadhaar Front Image</Label>
+                <div className="relative">
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleFileChange(e, 'front')}
+                    required
+                    className="h-12 rounded-xl bg-gray-50/50 border-transparent focus:bg-white focus:border-whatsapp-primary px-5 pt-2 transition-all cursor-pointer"
+                  />
+                  <Upload className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                </div>
+              </div>
+              <div className="space-y-2.5">
+                <Label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] px-2">Aadhaar Back Image</Label>
+                <div className="relative">
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleFileChange(e, 'back')}
+                    required
+                    className="h-12 rounded-xl bg-gray-50/50 border-transparent focus:bg-white focus:border-whatsapp-primary px-5 pt-2 transition-all cursor-pointer"
+                  />
+                  <Upload className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                </div>
+              </div>
+            </div>
+
             <div className="space-y-2.5">
               <Label htmlFor="education" className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] px-2">Education</Label>
               <Input
@@ -211,6 +242,7 @@ export default function Signup() {
                 placeholder="Degree, Certification, etc."
                 value={formData.education}
                 onChange={handleChange}
+                required
                 className="h-12 rounded-xl bg-gray-50/50 border-transparent focus:bg-white focus:border-whatsapp-primary px-5 transition-all font-medium"
               />
             </div>
@@ -223,6 +255,7 @@ export default function Signup() {
                 placeholder="e.g. Navigation, Safety, Logistics"
                 value={formData.skills}
                 onChange={handleChange}
+                required
                 className="h-12 rounded-xl bg-gray-50/50 border-transparent focus:bg-white focus:border-whatsapp-primary px-5 transition-all font-medium"
               />
             </div>
