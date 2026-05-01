@@ -37,6 +37,9 @@ router.post('/subscribe', authenticate, async (req, res) => {
       }
       user.pushSubscriptions.push(subscription);
       await user.save();
+      console.log(`New push subscription saved for user ${user._id}:`, subscription.endpoint);
+    } else {
+      console.log(`Push subscription already exists for user ${user._id}`);
     }
 
     res.status(201).json({

@@ -97,7 +97,7 @@ export default function Login() {
               )}
             </Button>
             <p className="text-sm text-gray-400 text-center font-medium">
-              New to the fleet?{' '}
+              New to the platform?{' '}
               <Link to="/signup" className="text-whatsapp-primary hover:underline font-bold">
                 Request Access
               </Link>

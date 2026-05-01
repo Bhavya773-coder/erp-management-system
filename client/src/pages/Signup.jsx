@@ -100,7 +100,7 @@ export default function Signup() {
               <img src="/logo.png" alt="Arcadian Logo" className="w-full h-full object-contain" />
             </div>
           </div>
-          <CardTitle className="text-3xl font-black text-gray-900 tracking-tight">Fleet Registration</CardTitle>
+          <CardTitle className="text-3xl font-black text-gray-900 tracking-tight">Create your Account</CardTitle>
           <CardDescription className="text-sm font-medium text-gray-500 uppercase tracking-[0.2em] mt-2 px-6">
             Join the Arcadian Works Digital Ecosystem
           </CardDescription>
@@ -178,7 +178,7 @@ export default function Signup() {
                 />
               </div>
               <div className="space-y-2.5">
-                <Label htmlFor="role" className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] px-2">Fleet Position</Label>
+                <Label htmlFor="role" className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] px-2">Account Position</Label>
                 <Select 
                   value={formData.role} 
                   onValueChange={(value) => setFormData({ ...formData, role: value })}
@@ -187,7 +187,7 @@ export default function Signup() {
                     <SelectValue placeholder="Position" />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl border-gray-100">
-                    <SelectItem value="EMPLOYEE">Fleet Employee</SelectItem>
+                    <SelectItem value="EMPLOYEE">Standard Employee</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -234,7 +234,7 @@ export default function Signup() {
               )}
             </Button>
             <p className="text-sm text-gray-400 text-center font-medium">
-              Already have fleet access?{' '}
+              Already have platform access?{' '}
               <Link to="/login" className="text-whatsapp-primary hover:underline font-bold">
                 Identity Sign In
               </Link>

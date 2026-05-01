@@ -52,6 +52,11 @@ export const useSocket = (token) => {
       const isDifferentChat = currentChat?.id !== message.chatId;
 
       if ((isWindowHidden || isDifferentChat) && message.senderId !== (currentUser?.id || currentUser?._id)) {
+        // Play a subtle notification sound
+        const audio = new Audio('/alarm.wav'); // Reusing alarm.wav or could use a shorter ping
+        audio.volume = 0.5;
+        audio.play().catch(() => {});
+
         if (Notification.permission === 'granted') {
           const notification = new Notification(`New message from ${message.sender?.name || 'Someone'}`, {
             body: message.messageType === 'TEXT' ? message.content : `Sent a ${message.messageType.toLowerCase()}`,
@@ -62,6 +67,20 @@ export const useSocket = (token) => {
             window.focus();
             // Optional: navigate to chat
           };
+        } else {
+          // Fallback for users who didn't allow notifications
+          toast({
+            title: `New message from ${message.sender?.name || 'Someone'}`,
+            description: message.messageType === 'TEXT' ? message.content : `Sent a ${message.messageType.toLowerCase()}`,
+            action: (
+              <button 
+                onClick={() => window.focus()} 
+                className="bg-whatsapp-primary text-white px-3 py-1 rounded-md text-xs font-bold"
+              >
+                VIEW
+              </button>
+            ),
+          });
         }
       }
 

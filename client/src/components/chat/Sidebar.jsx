@@ -214,6 +214,38 @@ export default function Sidebar({
             className="pl-11 h-12 bg-gray-50 border-none rounded-2xl text-sm font-medium placeholder:text-gray-400 focus-visible:ring-blue-100 transition-all"
           />
         </div>
+
+        {/* Notification Prompt for "Dumb Users" */}
+        {('Notification' in window && (Notification.permission === 'default' || Notification.permission === 'denied')) && (
+          <div className="mt-4 p-3 bg-gradient-to-r from-orange-500 to-orange-600 rounded-2xl shadow-lg shadow-orange-200 animate-pulse-subtle">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="bg-white/20 p-2 rounded-xl">
+                  <Globe className="h-4 w-4 text-white" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black text-white uppercase tracking-wider">Enable Alerts</p>
+                  <p className="text-[9px] text-orange-50 font-bold leading-tight">Don't miss new messages!</p>
+                </div>
+              </div>
+              <Button 
+                size="sm" 
+                className="h-8 bg-white text-orange-600 hover:bg-orange-50 font-black text-[10px] rounded-xl px-4"
+                onClick={() => {
+                  Notification.requestPermission().then(permission => {
+                    if (permission === 'granted') {
+                      window.location.reload(); // Reload to trigger subscription
+                    } else {
+                      alert("Please enable notifications in your browser settings to receive alerts.");
+                    }
+                  });
+                }}
+              >
+                ENABLE
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Action Buttons & Tabs */}

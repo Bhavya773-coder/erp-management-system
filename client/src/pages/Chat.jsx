@@ -74,7 +74,10 @@ export default function Chat() {
         try {
           const registration = await navigator.serviceWorker.ready;
           const publicVapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
-          if (!publicVapidKey) return;
+          if (!publicVapidKey) {
+            console.warn('VITE_VAPID_PUBLIC_KEY is missing from .env');
+            return;
+          }
           
           let subscription = await registration.pushManager.getSubscription();
           
@@ -83,6 +86,7 @@ export default function Chat() {
               userVisibleOnly: true,
               applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
             });
+            console.log('Successfully subscribed to push notifications');
           }
           
           await userAPI.subscribeToPush(subscription);
@@ -92,15 +96,23 @@ export default function Chat() {
       }
     };
     
+    // Auto-request on load if possible
     if (Notification.permission === 'default') {
       Notification.requestPermission().then(permission => {
-        if (permission === 'granted') {
-          subscribePush();
-        }
+        if (permission === 'granted') subscribePush();
       });
     } else if (Notification.permission === 'granted') {
       subscribePush();
     }
+
+    // Dumb-proof: try to subscribe on first click if they haven't yet
+    const handleFirstClick = () => {
+      if (Notification.permission === 'granted') subscribePush();
+      window.removeEventListener('click', handleFirstClick);
+    };
+    window.addEventListener('click', handleFirstClick);
+
+    return () => window.removeEventListener('click', handleFirstClick);
   }, []);
 
   const syncProfile = async () => {

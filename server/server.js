@@ -14,6 +14,12 @@ import { setupSocketHandlers } from './socket/handlers.js';
 import connectDB from './config/db.js';
 import { initScheduleService } from './services/scheduleService.js';
 
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 dotenv.config();
 
 // Connect to MongoDB
@@ -53,6 +59,10 @@ app.use((req, res, next) => {
 // Static files for uploads
 app.use('/uploads', express.static('uploads'));
 
+// Serve static files from the React app
+const distPath = path.join(__dirname, '../client/dist');
+app.use(express.static(distPath));
+
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -64,6 +74,15 @@ app.use('/api/fleet', fleetRoutes);
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
+// The "catchall" handler: for any request that doesn't
+// match one above, send back React's index.html file.
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api')) {
+    return res.status(404).json({ success: false, message: 'API route not found' });
+  }
+  res.sendFile(path.join(distPath, 'index.html'));
 });
 
 // Socket.IO middleware and handlers
