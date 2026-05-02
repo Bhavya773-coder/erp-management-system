@@ -15,7 +15,7 @@ import { LogOut, Menu } from 'lucide-react';
 
 export default function Chat() {
   const { user, logout } = useAuthStore();
-  const { 
+  const {
     chats,
     currentChat,
     messages,
@@ -29,24 +29,24 @@ export default function Chat() {
     typingUsers,
     deleteChat
   } = useChatStore();
-  
+
   const [showSidebar, setShowSidebar] = useState(true);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showAI, setShowAI] = useState(false);
   const [messageToDelete, setMessageToDelete] = useState(null);
-  
+
   const token = localStorage.getItem('token');
-  const { 
-    joinChat, 
-    leaveChat, 
-    sendMessage, 
+  const {
+    joinChat,
+    leaveChat,
+    sendMessage,
     completeSchedule,
     stopLocalAlarm,
     deleteMessageSocket,
-    startTyping, 
-    stopTyping, 
-    markMessagesSeen 
+    startTyping,
+    stopTyping,
+    markMessagesSeen
   } = useSocket(token);
 
   // Fetch initial data
@@ -54,66 +54,27 @@ export default function Chat() {
     fetchChats();
     fetchAllUsers();
     syncProfile();
-  }, []);
 
-  // Web Push Subscription
-  useEffect(() => {
-    const urlBase64ToUint8Array = (base64String) => {
-      const padding = '='.repeat((4 - base64String.length % 4) % 4);
-      const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
-      const rawData = window.atob(base64);
-      const outputArray = new Uint8Array(rawData.length);
-      for (let i = 0; i < rawData.length; ++i) {
-        outputArray[i] = rawData.charCodeAt(i);
-      }
-      return outputArray;
-    };
-
-    const subscribePush = async () => {
-      if ('serviceWorker' in navigator && 'PushManager' in window) {
-        try {
-          const registration = await navigator.serviceWorker.ready;
-          const publicVapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
-          if (!publicVapidKey) {
-            console.warn('VITE_VAPID_PUBLIC_KEY is missing from .env');
-            return;
-          }
-          
-          let subscription = await registration.pushManager.getSubscription();
-          
-          if (!subscription) {
-            subscription = await registration.pushManager.subscribe({
-              userVisibleOnly: true,
-              applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
-            });
-            console.log('Successfully subscribed to push notifications');
-          }
-          
-          await userAPI.subscribeToPush(subscription);
-        } catch (error) {
-          console.error('Error subscribing to push notifications:', error);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchChats();
+        const currentChat = useChatStore.getState().currentChat;
+        if (currentChat) {
+          useChatStore.getState().fetchMessages(currentChat.id);
         }
       }
     };
-    
-    // Auto-request on load if possible
-    if (Notification.permission === 'default') {
-      Notification.requestPermission().then(permission => {
-        if (permission === 'granted') subscribePush();
-      });
-    } else if (Notification.permission === 'granted') {
-      subscribePush();
-    }
 
-    // Dumb-proof: try to subscribe on first click if they haven't yet
-    const handleFirstClick = () => {
-      if (Notification.permission === 'granted') subscribePush();
-      window.removeEventListener('click', handleFirstClick);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
     };
-    window.addEventListener('click', handleFirstClick);
-
-    return () => window.removeEventListener('click', handleFirstClick);
   }, []);
+
+  // Push subscription is managed inside useSocket.
 
   const syncProfile = async () => {
     try {
@@ -132,14 +93,13 @@ export default function Chat() {
       const { fetchMessages } = useChatStore.getState();
       fetchMessages(currentChat.id);
       joinChat(currentChat.id);
-      markMessagesSeen(currentChat.id);
-      
+      setTimeout(() => markMessagesSeen(currentChat.id), 300); // BUG 2C FIX: Delay to ensure join is processed first
+
       return () => {
         leaveChat(currentChat.id);
       };
     }
   }, [currentChat?.id]);
-
 
 
   const handleChatSelect = (chat) => {
@@ -174,9 +134,9 @@ export default function Chat() {
       status: 'SENT',
       createdAt: new Date().toISOString(),
     };
-    
+
     addMessage(optimisticMessage);
-    
+
     // Send via socket
     sendMessage(messageData);
   };
@@ -216,7 +176,7 @@ export default function Chat() {
     } else {
       document.title = 'Arcadian ERP';
     }
-    
+
     return () => {
       document.title = 'Arcadian ERP';
     };
@@ -315,7 +275,7 @@ export default function Chat() {
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete message?</h3>
             <p className="text-gray-500 mb-6">Are you sure you want to delete this message for everyone?</p>
             <div className="flex flex-col space-y-2">
-              <button 
+              <button
                 onClick={() => {
                   deleteMessageSocket(messageToDelete.chatId, messageToDelete.messageId);
                   setMessageToDelete(null);
@@ -324,7 +284,7 @@ export default function Chat() {
               >
                 Delete for everyone
               </button>
-              <button 
+              <button
                 onClick={() => setMessageToDelete(null)}
                 className="w-full py-2.5 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-colors"
               >

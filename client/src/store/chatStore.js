@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { chatAPI, messageAPI, userAPI } from '@/lib/api';
+import { useAuthStore } from '@/store/authStore';
 
 export const useChatStore = create((set, get) => ({
   chats: [],
@@ -180,7 +181,7 @@ export const useChatStore = create((set, get) => ({
       const updatedChats = state.chats.map(chat => {
         if (chat.id === message.chatId) {
           const isCurrentChat = state.currentChat?.id === message.chatId;
-          const isFromMe = (message.senderId || message.sender?.id || message.sender?._id) === state.user?.id;
+          const isFromMe = (message.senderId || message.sender?.id || message.sender?._id) === useAuthStore.getState().user?.id || useAuthStore.getState().user?._id;
           
           return {
             ...chat,
@@ -254,7 +255,7 @@ export const useChatStore = create((set, get) => ({
         if (m.chatId === chatId) {
           if (messageId && m.id === messageId) {
             return { ...m, status };
-          } else if (!messageId && m.senderId === state.user?.id) {
+          } else if (!messageId && (m.senderId === (useAuthStore.getState().user?.id || useAuthStore.getState().user?._id))) {
             // For 'SEEN', usually all my messages are marked as seen by the other person
             return { ...m, status };
           }

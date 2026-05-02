@@ -20,7 +20,8 @@ export const sendPushNotification = async (subscription, payload) => {
     return { success: true };
   } catch (error) {
     console.error('Push Notification Error:', error);
-    if (error.statusCode === 410 || error.statusCode === 404) {
+    // BUG 5 FIX: Include 400 and 401 as expired subscription errors alongside 404 and 410
+    if ([400, 401, 404, 410].includes(error.statusCode)) {
       return { success: false, expired: true };
     }
     return { success: false, error };

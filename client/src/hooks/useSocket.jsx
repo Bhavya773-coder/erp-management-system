@@ -3,6 +3,7 @@ import { io } from 'socket.io-client';
 import { useChatStore } from '@/store/chatStore';
 import { useAuthStore } from '@/store/authStore';
 import { messageAPI, authAPI } from '@/lib/api';
+import { useToast } from '@/hooks/use-toast';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
 
@@ -22,42 +23,66 @@ function urlBase64ToUint8Array(base64String) {
   return outputArray;
 }
 
+// Singleton push subscription handler at module level
+let pushSynced = false;
+let pushSyncInProgress = false;
+
+async function subscribeToPushSingleton() {
+  if (pushSyncInProgress) return;
+  if (pushSynced) return;
+
+  pushSyncInProgress = true;
+  try {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      console.warn('Push messaging is not supported');
+      return;
+    }
+
+    console.log('🔄 Syncing push subscription...');
+    const registration = await navigator.serviceWorker.ready;
+
+    // Force fresh subscription to avoid VAPID key mismatch issues
+    const existingSubscription = await registration.pushManager.getSubscription();
+    if (existingSubscription) {
+      await existingSubscription.unsubscribe();
+      console.log('🗑️ Unsubscribed old push token');
+    }
+
+    const subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(import.meta.env.VITE_VAPID_PUBLIC_KEY)
+    });
+
+    // Send to backend using authAPI
+    await authAPI.subscribeToPush(subscription);
+    console.log('✅ Push subscription synced with server');
+    pushSynced = true;
+  } catch (error) {
+    console.error('❌ Push subscription failed:', error);
+  } finally {
+    pushSyncInProgress = false;
+  }
+}
+
 export const useSocket = (token) => {
   const socketRef = useRef(null);
-  const { addMessage, updateMessageStatus, setTypingUser, updateUserStatus, updateUser, removeUser, addUser, deleteMessage, upsertChat } = useChatStore();
+  const {
+    addMessage,
+    updateMessageStatus,
+    setTypingUser,
+    updateUserStatus,
+    updateUser,
+    removeUser,
+    addUser,
+    deleteMessage,
+    upsertChat
+  } = useChatStore();
   const { user: currentUser } = useAuthStore();
+  const { toast } = useToast();
   const activeAlarms = useRef({});
 
-  const subscribeToPush = useCallback(async () => {
-    try {
-      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-        console.warn('Push messaging is not supported');
-        return;
-      }
-
-      console.log('🔄 Syncing push subscription...');
-      const registration = await navigator.serviceWorker.ready;
-      
-      // Force fresh subscription to avoid VAPID key mismatch issues
-      const existingSubscription = await registration.pushManager.getSubscription();
-      if (existingSubscription) {
-        await existingSubscription.unsubscribe();
-        console.log('🗑️ Unsubscribed old push token');
-      }
-      
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(import.meta.env.VITE_VAPID_PUBLIC_KEY)
-      });
-
-      // Send to backend using authAPI
-      await authAPI.subscribeToPush(subscription);
-      console.log('✅ Push subscription synced with server');
-    } catch (error) {
-      console.error('❌ Push subscription failed:', error);
-    }
-  }, []);
-
+  // BUG 1 FIX: Changed dependency array to only [token].
+  // Store actions are destructured at module level (lines 27-29) for stable references.
   useEffect(() => {
     if (!token) return;
 
@@ -72,14 +97,21 @@ export const useSocket = (token) => {
     // Connection events
     socket.on('connect', () => {
       console.log('🔌 Socket connected:', socket.id);
-      
+
+      // Fetch latest data to catch up on missed messages during disconnect
+      useChatStore.getState().fetchChats();
+      const currentChat = useChatStore.getState().currentChat;
+      if (currentChat) {
+        useChatStore.getState().fetchMessages(currentChat.id);
+      }
+
       // Request/Verify Push Notification permission
       if (Notification.permission === 'default') {
         Notification.requestPermission().then(permission => {
-          if (permission === 'granted') subscribeToPush();
+          if (permission === 'granted') subscribeToPushSingleton();
         });
       } else if (Notification.permission === 'granted') {
-        subscribeToPush();
+        subscribeToPushSingleton();
       }
     });
 
@@ -124,13 +156,20 @@ export const useSocket = (token) => {
             window.focus();
           };
         }
+
+        // Always show toast notification in-app
+        toast({
+          title: `New message from ${message.sender?.name || 'Someone'}`,
+          description: message.messageType === 'TEXT' ? message.content : `Sent a ${message.messageType.toLowerCase()}`,
+          duration: 4000,
+        });
       }
 
       // Acknowledge delivery if we are the recipient
       if (message.senderId !== (currentUser?.id || currentUser?._id)) {
-        socket.emit('message:delivered', { 
-          messageId: message.id, 
-          chatId: message.chatId 
+        socket.emit('message:delivered', {
+          messageId: message.id,
+          chatId: message.chatId
         });
       }
     });
@@ -149,7 +188,7 @@ export const useSocket = (token) => {
 
     socket.on('message:updated', ({ chatId, messageId, updates }) => {
       useChatStore.getState().updateMessage(chatId, messageId, updates);
-      
+
       if (updates.isCompleted && activeAlarms.current[messageId]) {
         activeAlarms.current[messageId].pause();
         activeAlarms.current[messageId].currentTime = 0;
@@ -226,7 +265,7 @@ export const useSocket = (token) => {
       } catch (err) {
         console.error('Failed to play notification sound:', err);
       }
-      
+
       if (Notification.permission === 'granted') {
         new Notification(`Reminder: ${data.title}`, {
           body: `Created by ${data.senderName}`,
@@ -244,7 +283,7 @@ export const useSocket = (token) => {
       activeAlarms.current = {};
       socket.disconnect();
     };
-  }, [token, addMessage, updateMessageStatus, setTypingUser, updateUserStatus, updateUser, removeUser, addUser, deleteMessage, upsertChat, currentUser, subscribeToPush]);
+  }, [token]); // BUG 1 FIX: Only [token] dependency
 
   // Socket actions
   const joinChat = useCallback((chatId) => {
@@ -304,6 +343,6 @@ export const useSocket = (token) => {
     startTyping,
     stopTyping,
     markMessagesSeen,
-    subscribeToPush
+    subscribeToPush: subscribeToPushSingleton
   };
 };

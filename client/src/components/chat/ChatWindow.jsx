@@ -428,14 +428,25 @@ export default function ChatWindow({
               <Paperclip className={`h-5 w-5 ${isUploading ? 'animate-spin' : ''}`} />
             </Button>
             
-            <div className="flex-1 min-w-0 bg-gray-100/50 rounded-[1.5rem] border border-transparent focus-within:bg-white focus-within:border-whatsapp-primary focus-within:shadow-sm transition-all px-2">
-              <input
-                type="text"
+            <div className="flex-1 min-w-0 bg-gray-100/50 rounded-[1.5rem] border border-transparent focus-within:bg-white focus-within:border-whatsapp-primary focus-within:shadow-sm transition-all px-2 py-1">
+              <textarea
                 placeholder={t.typeMessage}
                 value={inputMessage}
-                onChange={handleInputChange}
-                onKeyPress={handleKeyPress}
-                className="w-full min-w-0 h-11 bg-transparent border-0 outline-none focus:ring-0 px-2 text-sm sm:text-base text-gray-900 placeholder:text-gray-500"
+                onChange={(e) => {
+                  handleInputChange(e);
+                  e.target.style.height = 'auto';
+                  e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                    e.target.style.height = 'auto';
+                  }
+                }}
+                className="w-full min-w-0 bg-transparent border-0 outline-none focus:ring-0 px-2 text-sm sm:text-base text-gray-900 placeholder:text-gray-500 resize-none py-2"
+                style={{ height: 'auto', minHeight: '36px', maxHeight: '120px' }}
+                rows={1}
                 disabled={isUploading}
               />
             </div>

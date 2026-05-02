@@ -51,11 +51,11 @@ export default function MessageBubble({ message, isOwn, showAvatar, onDelete, on
     if (message.isDeleted) return null;
     switch (message.status) {
       case 'SEEN':
-        return <CheckCheck className="w-3 h-3 text-whatsapp-primary" />;
+        return <CheckCheck className="w-4 h-4 text-[#53bdeb]" />;
       case 'DELIVERED':
-        return <CheckCheck className="w-3 h-3 text-gray-400" />;
+        return <CheckCheck className="w-4 h-4 text-gray-400" />;
       case 'SENT':
-        return <Check className="w-3 h-3 text-gray-400" />;
+        return <Check className="w-4 h-4 text-gray-400" />;
       default:
         return null;
     }

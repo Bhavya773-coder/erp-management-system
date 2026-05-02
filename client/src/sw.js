@@ -6,26 +6,37 @@ precacheAndRoute(self.__WB_MANIFEST || []);
 self.addEventListener('push', (event) => {
   if (!event.data) return;
 
-  try {
-    const data = event.data.json();
-    const options = {
-      body: data.body || 'New message received',
-      icon: data.icon || '/logo.png',
-      badge: data.badge || '/logo.png',
-      tag: data.id || data.tag || Math.random().toString(), // Force unique tag
-      renotify: true,
-      vibrate: [200, 100, 200],
-      data: {
-        url: data.data?.url || data.url || '/'
+  // BUG 4 FIX: Check if any tab is focused; skip notification if so
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      // If any client has focus, skip showing notification
+      if (windowClients.some(client => client.focused === true)) {
+        console.log('⏭️ Tab is focused, skipping notification');
+        return;
       }
-    };
+      // Continue with notification logic only if no tab is focused
+      return Promise.resolve();
+    }).then(() => {
+      try {
+        const data = event.data.json();
+        const options = {
+          body: data.body || 'New message received',
+          icon: data.icon || '/logo.png',
+          badge: data.badge || '/logo.png',
+          tag: data.id || data.tag || Math.random().toString(), // Force unique tag
+          renotify: true,
+          vibrate: [200, 100, 200],
+          data: {
+            url: data.data?.url || data.url || '/'
+          }
+        };
 
-    event.waitUntil(
-      self.registration.showNotification(data.title || 'Arcadian Works ERP', options)
-    );
-  } catch (error) {
-    console.error('Push Event Error:', error);
-  }
+        self.registration.showNotification(data.title || 'Arcadian Works ERP', options);
+      } catch (error) {
+        console.error('Push Event Error:', error);
+      }
+    })
+  );
 });
 
 self.addEventListener('notificationclick', (event) => {
