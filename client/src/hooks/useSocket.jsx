@@ -77,12 +77,32 @@ export const useSocket = (token) => {
     deleteMessage,
     upsertChat
   } = useChatStore();
-  const { user: currentUser } = useAuthStore();
+
+  // Get current user from localStorage (per-tab isolation)
+  const getUserFromStorage = useCallback(() => {
+    try {
+      const storedUser = localStorage.getItem('user');
+      if (storedUser) {
+        const user = JSON.parse(storedUser);
+        return {
+          id: user.id,
+          _id: user._id,
+          name: user.name
+        };
+      }
+    } catch (e) {
+      console.error('Failed to parse stored user:', e);
+    }
+    return null;
+  }, []);
+
+  const currentUser = getUserFromStorage();
+
   const { toast } = useToast();
   const activeAlarms = useRef({});
 
   // BUG 1 FIX: Changed dependency array to only [token].
-  // Store actions are destructured at module level (lines 27-29) for stable references.
+  // Store actions are destructured at module level for stable references.
   useEffect(() => {
     if (!token) return;
 
@@ -123,7 +143,7 @@ export const useSocket = (token) => {
       console.error('Socket connection error:', error.message);
     });
 
-    // Message events
+    // Message events - Main received handler
     socket.on('message:received', ({ message }) => {
       console.log('📨 Message received:', message);
       addMessage(message);
@@ -133,7 +153,7 @@ export const useSocket = (token) => {
       const isWindowHidden = document.visibilityState === 'hidden';
       const isDifferentChat = currentChat?.id !== message.chatId;
 
-      // Aggressive notification check for debugging
+      // WhatsApp-style: Only notify if hidden, different chat, or not from me
       if ((isWindowHidden || isDifferentChat) && message.senderId !== (currentUser?.id || currentUser?._id)) {
         // Play notification sound
         const audio = new Audio('/alarm.wav');
@@ -174,18 +194,22 @@ export const useSocket = (token) => {
       }
     });
 
+    // Message sent event - for optimistic update
     socket.on('message:sent', ({ message }) => {
       addMessage(message);
     });
 
+    // Status update event - handles delivery/read ticks
     socket.on('message:status_update', ({ chatId, status, messageId }) => {
       updateMessageStatus(chatId, status, messageId);
     });
 
+    // Message deleted event
     socket.on('message:deleted', ({ chatId, messageId }) => {
       deleteMessage(chatId, messageId);
     });
 
+    // Message updated event (schedules, etc)
     socket.on('message:updated', ({ chatId, messageId, updates }) => {
       useChatStore.getState().updateMessage(chatId, messageId, updates);
 
@@ -196,14 +220,17 @@ export const useSocket = (token) => {
       }
     });
 
+    // Chat updated event
     socket.on('chat:updated', ({ chat }) => {
       upsertChat(chat);
     });
 
+    // Chat deleted event
     socket.on('chat:deleted', ({ chatId }) => {
       useChatStore.getState().deleteChatLocal(chatId);
     });
 
+    // Message error event
     socket.on('message:error', ({ error, tempId }) => {
       console.error('Message error:', error, 'Temp ID:', tempId);
     });
@@ -218,10 +245,12 @@ export const useSocket = (token) => {
       updateUserStatus(userId, isOnline, lastSeen);
     });
 
+    // User created event
     socket.on('user:created', ({ user }) => {
       addUser(user);
     });
 
+    // User updated event
     socket.on('user:updated', ({ userId, updates }) => {
       updateUser(userId, updates);
       if (userId === (currentUser?.id || currentUser?._id)) {
@@ -229,19 +258,23 @@ export const useSocket = (token) => {
       }
     });
 
+    // User role updated event
     socket.on('user:role_updated', ({ role }) => {
       useAuthStore.getState().updateUser({ role });
     });
 
+    // User deleted self event
     socket.on('user:deleted_self', () => {
       useAuthStore.getState().logout();
       window.location.href = '/login';
     });
 
+    // User deleted event
     socket.on('user:deleted', ({ userId }) => {
       removeUser(userId);
     });
 
+    // Schedule reminder event
     socket.on('notification:schedule_due', (data) => {
       if (data.isCompleted) return;
 
@@ -283,7 +316,7 @@ export const useSocket = (token) => {
       activeAlarms.current = {};
       socket.disconnect();
     };
-  }, [token]); // BUG 1 FIX: Only [token] dependency
+  }, [token, currentUser, addMessage, updateMessageStatus, setTypingUser, updateUserStatus, updateUser, removeUser, addUser, deleteMessage, upsertChat, subscribeToPushSingleton]);
 
   // Socket actions
   const joinChat = useCallback((chatId) => {

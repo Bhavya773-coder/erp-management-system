@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add *)",
+      "Bash(git commit -m 'Fix: Restore all WhatsApp-like features and fix cross-tab isolation *)"
+    ]
+  }
+}

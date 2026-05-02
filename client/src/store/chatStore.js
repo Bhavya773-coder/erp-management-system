@@ -181,7 +181,7 @@ export const useChatStore = create((set, get) => ({
       const updatedChats = state.chats.map(chat => {
         if (chat.id === message.chatId) {
           const isCurrentChat = state.currentChat?.id === message.chatId;
-          const isFromMe = (message.senderId || message.sender?.id || message.sender?._id) === useAuthStore.getState().user?.id || useAuthStore.getState().user?._id;
+          const isFromMe = (message.senderId || message.sender?.id || message.sender?._id) === (useAuthStore.getState().user?.id || useAuthStore.getState().user?._id);
           
           return {
             ...chat,

@@ -74,7 +74,64 @@ export default function Chat() {
     };
   }, []);
 
-  // Push subscription is managed inside useSocket.
+  // Web Push Subscription
+  useEffect(() => {
+    const urlBase64ToUint8Array = (base64String) => {
+      const padding = '='.repeat((4 - base64String.length % 4) % 4);
+      const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+      const rawData = window.atob(base64);
+      const outputArray = new Uint8Array(rawData.length);
+      for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+      }
+      return outputArray;
+    };
+
+    const subscribePush = async () => {
+      if ('serviceWorker' in navigator && 'PushManager' in window) {
+        try {
+          const registration = await navigator.serviceWorker.ready;
+          const publicVapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+          if (!publicVapidKey) {
+            console.warn('VITE_VAPID_PUBLIC_KEY is missing from .env');
+            return;
+          }
+
+          let subscription = await registration.pushManager.getSubscription();
+
+          if (!subscription) {
+            subscription = await registration.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
+            });
+            console.log('Successfully subscribed to push notifications');
+          }
+
+          await userAPI.subscribeToPush(subscription);
+        } catch (error) {
+          console.error('Error subscribing to push notifications:', error);
+        }
+      }
+    };
+
+    // Auto-request on load if possible
+    if (Notification.permission === 'default') {
+      Notification.requestPermission().then(permission => {
+        if (permission === 'granted') subscribePush();
+      });
+    } else if (Notification.permission === 'granted') {
+      subscribePush();
+    }
+
+    // Dumb-proof: try to subscribe on first click if they haven't yet
+    const handleFirstClick = () => {
+      if (Notification.permission === 'granted') subscribePush();
+      window.removeEventListener('click', handleFirstClick);
+    };
+    window.addEventListener('click', handleFirstClick);
+
+    return () => window.removeEventListener('click', handleFirstClick);
+  }, []);
 
   const syncProfile = async () => {
     try {
@@ -93,7 +150,7 @@ export default function Chat() {
       const { fetchMessages } = useChatStore.getState();
       fetchMessages(currentChat.id);
       joinChat(currentChat.id);
-      setTimeout(() => markMessagesSeen(currentChat.id), 300); // BUG 2C FIX: Delay to ensure join is processed first
+      markMessagesSeen(currentChat.id);
 
       return () => {
         leaveChat(currentChat.id);
