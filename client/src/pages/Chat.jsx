@@ -10,6 +10,7 @@ import WelcomeScreen from '@/components/chat/WelcomeScreen';
 import CreateGroupModal from '@/components/chat/CreateGroupModal';
 import ProfileModal from '@/components/chat/ProfileModal';
 import FleetView from '@/components/chat/FleetView';
+import ForwardMessageModal from '@/components/chat/ForwardMessageModal';
 import { Button } from '@/components/ui/button';
 import { LogOut, Menu } from 'lucide-react';
 
@@ -167,32 +168,36 @@ export default function Chat() {
     }
   };
 
-  const handleSendMessage = (content, options = null) => {
-    if (!currentChat) return;
+  const handleSendMessage = (content, options = null, overrideChatId = null) => {
+    const targetChatId = overrideChatId || currentChat?.id;
+    if (!targetChatId) return;
 
-    const tempId = Date.now().toString();
+    const tempId = Date.now().toString() + Math.random().toString(36).substr(2, 5);
     const messageData = {
-      chatId: currentChat.id,
+      chatId: targetChatId,
       content,
       messageType: options?.messageType || (options ? (options.isImage ? 'IMAGE' : 'FILE') : 'TEXT'),
       fileUrl: options?.fileUrl,
       fileName: options?.fileName,
       fileSize: options?.fileSize,
       scheduleDate: options?.scheduleDate,
+      forwarded: options?.isForwarded || false,
+      forwardCount: options?.forwardCount || 0,
       tempId,
     };
 
-    // Optimistically add message
-    const optimisticMessage = {
-      id: tempId,
-      ...messageData,
-      senderId: user.id,
-      sender: { id: user.id, name: user.name },
-      status: 'SENT',
-      createdAt: new Date().toISOString(),
-    };
-
-    addMessage(optimisticMessage);
+    // Optimistically add message ONLY if we are currently looking at this chat
+    if (targetChatId === currentChat?.id) {
+      const optimisticMessage = {
+        id: tempId,
+        ...messageData,
+        senderId: user.id,
+        sender: { id: user.id, name: user.name },
+        status: 'SENT',
+        createdAt: new Date().toISOString(),
+      };
+      addMessage(optimisticMessage);
+    }
 
     // Send via socket
     sendMessage(messageData);

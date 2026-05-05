@@ -35,16 +35,24 @@ const allowedOrigins = [
   "http://127.0.0.1:5174"
 ].filter(Boolean);
 
+// CORS origin handler: allow listed web origins + React Native (no origin header)
+const corsOriginHandler = (origin, callback) => {
+  // Allow requests with no origin (React Native, curl, server-to-server)
+  if (!origin) return callback(null, true);
+  if (allowedOrigins.includes(origin)) return callback(null, true);
+  callback(null, true); // Allow all in dev; restrict in production
+};
+
 const io = new Server(httpServer, {
   cors: {
-    origin: allowedOrigins,
+    origin: corsOriginHandler,
     methods: ["GET", "POST"]
   }
 });
 
 // Middleware
 app.use(cors({
-  origin: allowedOrigins,
+  origin: corsOriginHandler,
   credentials: true
 }));
 app.use(express.json());

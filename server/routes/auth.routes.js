@@ -212,4 +212,71 @@ router.post('/push-subscription', async (req, res) => {
   }
 });
 
+// @route   POST /api/auth/expo-push-token
+// @desc    Register an Expo push token for mobile notifications
+// @access  Private
+router.post('/expo-push-token', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ success: false, message: 'No token provided' });
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const { expoPushToken } = req.body;
+
+    if (!expoPushToken) {
+      return res.status(400).json({ success: false, message: 'Expo push token is required' });
+    }
+
+    // Add token to array if not already present
+    const user = await User.findById(decoded.userId);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    if (!user.expoPushTokens) user.expoPushTokens = [];
+    
+    if (!user.expoPushTokens.includes(expoPushToken)) {
+      user.expoPushTokens.push(expoPushToken);
+      await user.save();
+      console.log(`📱 Expo push token registered for user ${decoded.userId}: ${expoPushToken}`);
+    } else {
+      console.log(`📱 Expo push token already exists for user ${decoded.userId}`);
+    }
+
+    res.json({ success: true, message: 'Expo push token registered' });
+  } catch (error) {
+    console.error('Expo push token registration error:', error);
+    res.status(401).json({ success: false, message: 'Invalid or expired token' });
+  }
+});
+
+// @route   DELETE /api/auth/expo-push-token
+// @desc    Unregister an Expo push token
+// @access  Private
+router.delete('/expo-push-token', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ success: false, message: 'No token provided' });
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const { expoPushToken } = req.body;
+
+    if (!expoPushToken) {
+      return res.status(400).json({ success: false, message: 'Expo push token is required' });
+    }
+
+    const user = await User.findById(decoded.userId);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    if (user.expoPushTokens) {
+      user.expoPushTokens = user.expoPushTokens.filter(t => t !== expoPushToken);
+      await user.save();
+      console.log(`📱 Expo push token removed for user ${decoded.userId}: ${expoPushToken}`);
+    }
+
+    res.json({ success: true, message: 'Expo push token unregistered' });
+  } catch (error) {
+    console.error('Expo push token unregistration error:', error);
+    res.status(401).json({ success: false, message: 'Invalid or expired token' });
+  }
+});
+
 export default router;

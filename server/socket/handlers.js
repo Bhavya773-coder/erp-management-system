@@ -1,7 +1,10 @@
 import User from '../models/User.js';
 import Chat from '../models/Chat.js';
 import Message from '../models/Message.js';
+import VoucherSequence from '../models/VoucherSequence.js';
 import { sendPushNotification } from '../utils/pushNotification.js';
+import { sendExpoPushNotifications } from '../utils/expoPush.js';
+import mongoose from 'mongoose';
 
 // Store connected users: { userId: socketId }
 const connectedUsers = new Map();
@@ -68,7 +71,7 @@ export const setupSocketHandlers = (io) => {
 
     // Handle send message
     socket.on('message:send', async (data) => {
-      const { chatId, content, messageType = 'TEXT', fileUrl, fileName, fileSize, scheduleDate, tempId } = data;
+      const { chatId, content, messageType = 'TEXT', fileUrl, fileName, fileSize, scheduleDate, tempId, forwarded, forwardCount, voucherData } = data;
       
       try {
         // Verify user is member of chat
@@ -85,6 +88,18 @@ export const setupSocketHandlers = (io) => {
           return;
         }
 
+        let finalVoucherData = voucherData;
+        if (messageType === 'VOUCHER' && voucherData) {
+          const prefix = voucherData.company; // 'MP', 'AST', 'AE'
+          const seqDoc = await VoucherSequence.findOneAndUpdate(
+            { companyPrefix: prefix },
+            { $inc: { seq: 1 } },
+            { new: true, upsert: true }
+          );
+          const number = `${prefix}-${seqDoc.seq.toString().padStart(3, '0')}`;
+          finalVoucherData = { ...voucherData, number, status: 'PENDING' };
+        }
+
         // Create message
         const message = await Message.create({
           chat: chatId,
@@ -95,6 +110,9 @@ export const setupSocketHandlers = (io) => {
           fileName,
           fileSize,
           scheduleDate,
+          forwarded: forwarded || false,
+          forwardCount: forwardCount || 0,
+          voucherData: finalVoucherData,
           status: 'SENT'
         });
 
@@ -111,6 +129,9 @@ export const setupSocketHandlers = (io) => {
           status: populatedMessage.status,
           scheduleDate: populatedMessage.scheduleDate,
           isCompleted: populatedMessage.isCompleted || false,
+          forwarded: populatedMessage.forwarded,
+          forwardCount: populatedMessage.forwardCount,
+          voucherData: populatedMessage.voucherData,
           createdAt: populatedMessage.createdAt,
           senderId: populatedMessage.sender._id.toString(),
           sender: {
@@ -122,7 +143,7 @@ export const setupSocketHandlers = (io) => {
 
         // Update chat updatedAt
         const updatedChat = await Chat.findByIdAndUpdate(chatId, { updatedAt: Date.now() }, { new: true })
-          .populate('members.user', 'name email avatarUrl isOnline lastSeen phone education skills role pushSubscription');
+          .populate('members.user', 'name email avatarUrl isOnline lastSeen phone education skills role pushSubscription expoPushTokens');
 
         // Prepare full chat object for sidebar sync
         const validMembers = updatedChat.members.filter(m => m.user);
@@ -162,6 +183,7 @@ export const setupSocketHandlers = (io) => {
           
           // Send push notification to other users
           if (userId !== socket.userId) {
+            // --- Web Push (browser) ---
             const pushSubscription = member.user.pushSubscription;
             
             if (pushSubscription) {
@@ -179,17 +201,42 @@ export const setupSocketHandlers = (io) => {
                 }
               };
               
-              console.log(`📡 Sending push to user ${userId}...`);
+              console.log(`📡 Sending web push to user ${userId}...`);
               sendPushNotification(pushSubscription, pushPayload).then(result => {
                 if (result.expired) {
                   console.log(`⚠️ Push subscription expired for user ${userId}, clearing...`);
                   User.findByIdAndUpdate(userId, { pushSubscription: null }).exec();
                 } else if (result.success) {
-                  console.log(`✅ Push sent successfully to user ${userId}`);
+                  console.log(`✅ Web push sent to user ${userId}`);
                 }
-              }).catch(err => console.error(`❌ Push send failed for user ${userId}:`, err));
-            } else {
-              console.log(`ℹ️ No push subscription found for user ${userId}`);
+              }).catch(err => console.error(`❌ Web push failed for user ${userId}:`, err));
+            }
+
+            // --- Expo Push (mobile — Android & iOS) ---
+            const expoPushTokens = member.user.expoPushTokens;
+            if (expoPushTokens && expoPushTokens.length > 0) {
+              const chatName = updatedChat.isGroup ? updatedChat.name : formattedMessage.sender.name;
+              const subtitle = updatedChat.isGroup ? formattedMessage.sender.name : undefined;
+              
+              let body = formattedMessage.content || '';
+              if (formattedMessage.messageType === 'IMAGE') body = '📷 Photo';
+              else if (formattedMessage.messageType === 'FILE') body = '📄 ' + (formattedMessage.fileName || 'Document');
+              else if (formattedMessage.messageType === 'SCHEDULE') body = '📅 Schedule';
+
+              sendExpoPushNotifications(expoPushTokens, {
+                title: chatName,
+                subtitle,
+                body,
+                sound: 'default',
+                badge: 1,
+                channelId: 'messages',
+                data: {
+                  chatId: formattedMessage.chatId,
+                  messageId: formattedMessage.id,
+                  senderName: formattedMessage.sender.name,
+                  type: 'message'
+                }
+              });
             }
           }
         });
@@ -201,6 +248,91 @@ export const setupSocketHandlers = (io) => {
           error: 'Failed to send message',
           tempId
         });
+      }
+    });
+
+    // Handle voucher action
+    socket.on('voucher:action', async (data) => {
+      const { messageId, action } = data;
+      try {
+        const message = await Message.findById(messageId).populate('sender', 'name').populate('chat');
+        if (!message || message.messageType !== 'VOUCHER') return;
+        
+        message.voucherData.status = action;
+        await message.save();
+        
+        io.to(`user:${message.sender._id.toString()}`).emit('message:update', {
+          messageId: message._id.toString(),
+          chatId: message.chat._id.toString(),
+          voucherData: message.voucherData
+        });
+        io.to(`chat:${message.chat._id.toString()}`).emit('message:update', {
+          messageId: message._id.toString(),
+          chatId: message.chat._id.toString(),
+          voucherData: message.voucherData
+        });
+
+        const senderUser = await User.findById(message.sender._id);
+        if (senderUser && senderUser.expoPushTokens && senderUser.expoPushTokens.length > 0) {
+           sendExpoPushNotifications(senderUser.expoPushTokens, {
+             title: `Voucher ${action}`,
+             body: `Voucher ${message.voucherData.number} has been ${action.toLowerCase()}.`,
+             data: { type: 'voucher', chatId: message.chat._id.toString() }
+           });
+        }
+
+        if (action === 'APPROVED') {
+          const accountsId = '69f9ec5882a1f7313545e8e7';
+          const approverId = socket.userId;
+          
+          const accIdObj = new mongoose.Types.ObjectId(accountsId);
+          const appIdObj = new mongoose.Types.ObjectId(approverId);
+
+          let accChat = await Chat.findOne({
+            isGroup: false,
+            'members.user': { $all: [accIdObj, appIdObj] }
+          });
+          
+          if (!accChat) {
+            accChat = await Chat.create({
+              isGroup: false,
+              members: [{ user: appIdObj }, { user: accIdObj }]
+            });
+          }
+
+          const newMsg = await Message.create({
+            chat: accChat._id,
+            sender: approverId,
+            content: `Voucher Approved: ${message.voucherData.number}`,
+            messageType: 'VOUCHER',
+            fileUrl: message.fileUrl,
+            voucherData: message.voucherData,
+            forwarded: true,
+            forwardCount: message.forwardCount + 1,
+            status: 'SENT'
+          });
+          
+          const popMsg = await Message.findById(newMsg._id).populate('sender', 'name');
+          const formattedForward = {
+             id: popMsg._id.toString(),
+             chatId: popMsg.chat.toString(),
+             content: popMsg.content,
+             messageType: popMsg.messageType,
+             fileUrl: popMsg.fileUrl,
+             voucherData: popMsg.voucherData,
+             forwarded: popMsg.forwarded,
+             forwardCount: popMsg.forwardCount,
+             createdAt: popMsg.createdAt,
+             senderId: popMsg.sender._id.toString(),
+             sender: { id: popMsg.sender._id.toString(), name: popMsg.sender.name },
+             status: popMsg.status
+          };
+
+          io.to(`user:${approverId}`).emit('message:received', { message: formattedForward });
+          io.to(`user:${accountsId}`).emit('message:received', { message: formattedForward });
+        }
+      } catch (error) {
+        console.error('Voucher action error:', error);
       }
     });
 

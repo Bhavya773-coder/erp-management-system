@@ -6,17 +6,8 @@ precacheAndRoute(self.__WB_MANIFEST || []);
 self.addEventListener('push', (event) => {
   if (!event.data) return;
 
-  // BUG 4 FIX: Check if any tab is focused; skip notification if so
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      // If any client has focus, skip showing notification
-      if (windowClients.some(client => client.focused === true)) {
-        console.log('⏭️ Tab is focused, skipping notification');
-        return;
-      }
-      // Continue with notification logic only if no tab is focused
-      return Promise.resolve();
-    }).then(() => {
+    (async () => {
       try {
         const data = event.data.json();
         const options = {
@@ -35,7 +26,7 @@ self.addEventListener('push', (event) => {
       } catch (error) {
         console.error('Push Event Error:', error);
       }
-    })
+    })()
   );
 });
 

@@ -34,3 +34,8 @@ yarn-error.log*
 # Database (if local)
 *.sqlite
 *.db
+
+# Mobile and AI config
+mobile/
+.claude/
+.gemini/

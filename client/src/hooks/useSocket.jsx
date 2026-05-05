@@ -78,25 +78,8 @@ export const useSocket = (token) => {
     upsertChat
   } = useChatStore();
 
-  // Get current user from localStorage (per-tab isolation)
-  const getUserFromStorage = useCallback(() => {
-    try {
-      const storedUser = localStorage.getItem('user');
-      if (storedUser) {
-        const user = JSON.parse(storedUser);
-        return {
-          id: user.id,
-          _id: user._id,
-          name: user.name
-        };
-      }
-    } catch (e) {
-      console.error('Failed to parse stored user:', e);
-    }
-    return null;
-  }, []);
-
-  const currentUser = getUserFromStorage();
+  // Get current user from useAuthStore (properly initialized on login)
+  const { user: authUser } = useAuthStore();
 
   const { toast } = useToast();
   const activeAlarms = useRef({});
@@ -154,7 +137,8 @@ export const useSocket = (token) => {
       const isDifferentChat = currentChat?.id !== message.chatId;
 
       // WhatsApp-style: Only notify if hidden, different chat, or not from me
-      if ((isWindowHidden || isDifferentChat) && message.senderId !== (currentUser?.id || currentUser?._id)) {
+      const myUserId = authUser?.id || authUser?._id;
+      if ((isWindowHidden || isDifferentChat) && message.senderId !== myUserId) {
         // Play notification sound
         const audio = new Audio('/alarm.wav');
         audio.volume = 0.5;
@@ -186,7 +170,7 @@ export const useSocket = (token) => {
       }
 
       // Acknowledge delivery if we are the recipient
-      if (message.senderId !== (currentUser?.id || currentUser?._id)) {
+      if (message.senderId !== (authUser?.id || authUser?._id)) {
         socket.emit('message:delivered', {
           messageId: message.id,
           chatId: message.chatId
@@ -253,7 +237,7 @@ export const useSocket = (token) => {
     // User updated event
     socket.on('user:updated', ({ userId, updates }) => {
       updateUser(userId, updates);
-      if (userId === (currentUser?.id || currentUser?._id)) {
+      if (userId === (authUser?.id || authUser?._id)) {
         useAuthStore.getState().updateUser(updates);
       }
     });
@@ -316,7 +300,7 @@ export const useSocket = (token) => {
       activeAlarms.current = {};
       socket.disconnect();
     };
-  }, [token, currentUser, addMessage, updateMessageStatus, setTypingUser, updateUserStatus, updateUser, removeUser, addUser, deleteMessage, upsertChat, subscribeToPushSingleton]);
+  }, [token, authUser, addMessage, updateMessageStatus, setTypingUser, updateUserStatus, updateUser, removeUser, addUser, deleteMessage, upsertChat, subscribeToPushSingleton]);
 
   // Socket actions
   const joinChat = useCallback((chatId) => {

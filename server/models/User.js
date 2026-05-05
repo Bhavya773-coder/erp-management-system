@@ -14,6 +14,7 @@ const userSchema = new mongoose.Schema({
   skills: [{ type: String }],
   avatarUrl: { type: String },
   pushSubscription: { type: Object, default: null },
+  expoPushTokens: [{ type: String }],
   isOnline: { type: Boolean, default: false },
   lastSeen: { type: Date, default: Date.now },
   createdAt: { type: Date, default: Date.now },

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { format, differenceInSeconds } from 'date-fns';
-import { Check, CheckCheck, FileText, Download, Trash2, Ban, Timer, Calendar } from 'lucide-react';
+import { Check, CheckCheck, FileText, Download, Trash2, Ban, Timer, Calendar, Share2 } from 'lucide-react';
 import { fileAPI } from '@/lib/api';
 
 const Countdown = ({ targetDate }) => {
@@ -38,7 +38,7 @@ const Countdown = ({ targetDate }) => {
   );
 };
 
-export default function MessageBubble({ message, isOwn, showAvatar, onDelete, onComplete, onStopAlarm }) {
+export default function MessageBubble({ message, isOwn, showAvatar, onDelete, onForward, onComplete, onStopAlarm, isForwardMode, isSelected, onToggleSelect }) {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [localCompleted, setLocalCompleted] = useState(false);
@@ -277,8 +277,18 @@ export default function MessageBubble({ message, isOwn, showAvatar, onDelete, on
   };
 
   return (
-    <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'} group relative px-0 sm:px-1`}>
+    <div 
+      className={`flex ${isOwn ? 'justify-end' : 'justify-start'} group relative px-0 sm:px-1 mb-1 transition-all ${isForwardMode ? 'cursor-pointer hover:bg-black/5 rounded-lg py-1 -mx-2 px-2' : ''}`}
+      onClick={() => isForwardMode && onToggleSelect?.()}
+    >
       <div className={`flex items-end max-w-[85%] sm:max-w-[70%] ${isOwn ? 'flex-row-reverse' : 'flex-row'}`}>
+        
+        {isForwardMode && (
+          <div className={`flex items-center justify-center shrink-0 w-5 h-5 rounded-full border-2 mr-3 ${isOwn ? 'ml-3 mr-0' : ''} ${isSelected ? 'bg-whatsapp-primary border-whatsapp-primary' : 'border-gray-300 bg-white'}`}>
+            {isSelected && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+          </div>
+        )}
+
         {/* Avatar */}
         {!isOwn && showAvatar && (
           <Avatar className="h-7 w-7 sm:h-8 sm:w-8 shrink-0 mr-2 mb-1 border-2 border-white shadow-sm">
@@ -308,6 +318,13 @@ export default function MessageBubble({ message, isOwn, showAvatar, onDelete, on
               </p>
             )}
 
+            {/* Forwarded Indicator */}
+            {message.forwarded && (
+              <div className={`flex items-center text-[10px] italic mb-1 ${isOwn ? 'text-white/80' : 'text-gray-500'}`}>
+                <Share2 className="w-3 h-3 mr-1" />
+                <span>Forwarded {message.forwardCount > 1 ? `many times` : ''}</span>
+              </div>
+            )}
             {/* Message Content */}
             <div className="leading-relaxed">
               {renderContent()}
@@ -326,15 +343,29 @@ export default function MessageBubble({ message, isOwn, showAvatar, onDelete, on
             )}
           </div>
 
-          {/* Action Button - Visible on mobile, hover on desktop */}
-          {isOwn && !message.isDeleted && (
-            <button 
-              onClick={() => onDelete(message.id)}
-              className="absolute -left-10 top-1/2 -translate-y-1/2 p-2 bg-white rounded-full shadow-md opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all text-red-500 hover:bg-red-50 lg:p-1.5"
-              title="Delete message"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+          {/* Action Buttons - Hidden by default, visible on hover */}
+          {!isForwardMode && !message.isDeleted && (
+            <>
+              {/* Forward Button */}
+              <button
+                onClick={(e) => { e.stopPropagation(); onForward?.(message.id); }}
+                className={`absolute ${isOwn ? '-left-10' : '-right-10'} top-1/2 -translate-y-1/2 p-1.5 sm:p-2 bg-white rounded-full shadow-md opacity-100 lg:opacity-0 group-hover:opacity-100 transition-all text-whatsapp-primary hover:bg-green-50 hover:scale-110`}
+                title="Forward message"
+              >
+                <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              </button>
+
+              {/* Delete Button */}
+              {isOwn && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onDelete(message.id); }}
+                  className="absolute -left-20 top-1/2 -translate-y-1/2 p-1.5 sm:p-2 bg-white rounded-full shadow-md opacity-100 lg:opacity-0 group-hover:opacity-100 transition-all text-red-500 hover:bg-red-50 hover:scale-110"
+                  title="Delete message"
+                >
+                  <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>

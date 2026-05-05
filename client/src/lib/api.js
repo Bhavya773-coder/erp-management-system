@@ -69,6 +69,8 @@ const messageAPI = {
   completeSchedule: (id) => api.put(`/messages/${id}/complete`),
   updateStatus: (messageId, status) => api.put(`/messages/${messageId}/status`, { status }),
   deleteMessage: (id) => api.delete(`/messages/${id}`),
+  forwardMessage: (messageId, targetChatId) => api.post('/messages/forward', { messageId, targetChatId }),
+  getMessageForForward: (id) => api.get(`/messages/forward/${id}`),
 };
 
 export const fleetAPI = {
