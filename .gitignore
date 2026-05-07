@@ -36,6 +36,5 @@ yarn-error.log*
 *.db
 
 # Mobile and AI config
-mobile/
 .claude/
 .gemini/

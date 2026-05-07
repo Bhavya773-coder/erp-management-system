@@ -1,0 +1,20 @@
+# .easignore - Tell EAS which files to upload
+# We start by ignoring everything that git ignores
+# But we EXCLUDE google-services.json so it gets uploaded for the build
+
+node_modules/
+.expo/
+dist/
+web-build/
+
+# Ensure google-services.json is UPLOADED even if git ignores it
+!google-services.json
+
+# Keep other native secrets out of EAS unless needed
+ios/
+android/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
