@@ -15,6 +15,7 @@ import connectDB from './config/db.js';
 import { initScheduleService } from './services/scheduleService.js';
 
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -69,6 +70,15 @@ app.use('/uploads', express.static('uploads'));
 
 // Serve static files from the React app
 const distPath = path.join(__dirname, '../client/dist');
+console.log(`📂 Serving static files from: ${distPath}`);
+
+if (!fs.existsSync(distPath)) {
+  console.error(`❌ ERROR: Static directory not found at ${distPath}`);
+} else {
+  const indexExists = fs.existsSync(path.join(distPath, 'index.html'));
+  console.log(`✅ Static directory found at ${distPath}`);
+  console.log(`${indexExists ? '✅' : '❌'} index.html ${indexExists ? 'exists' : 'NOT found'} at ${path.join(distPath, 'index.html')}`);
+}
 app.use(express.static(distPath));
 
 // API Routes
