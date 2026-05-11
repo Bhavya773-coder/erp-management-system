@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "498377137774",
+    "project_id": "arcadian-erp-notifications",
+    "storage_bucket": "arcadian-erp-notifications.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:498377137774:android:de34f901bb27c2aa02d07f",
+        "android_client_info": {
+          "package_name": "com.arcadian.chat"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD-TzRe1UdUGaAhm8FZHpL2crw_HcFPk4M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -63,8 +63,7 @@ export const sendFCMNotifications = async (tokens, payload) => {
       notification: {
         channelId: payload.channelId || 'messages',
         icon: 'notification_icon',
-        color: '#25D366',
-        badge: payload.badge?.toString() || '1'
+        color: '#25D366'
       }
     },
     apns: {
