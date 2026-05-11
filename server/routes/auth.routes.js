@@ -279,4 +279,64 @@ router.delete('/expo-push-token', async (req, res) => {
   }
 });
 
+// @route   POST /api/auth/fcm-token
+// @desc    Register a native FCM token for direct Firebase notifications
+// @access  Private
+router.post('/fcm-token', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ success: false, message: 'No token provided' });
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const { fcmToken } = req.body;
+
+    if (!fcmToken) {
+      return res.status(400).json({ success: false, message: 'FCM token is required' });
+    }
+
+    const user = await User.findById(decoded.userId);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    if (!user.fcmTokens) user.fcmTokens = [];
+    
+    if (!user.fcmTokens.includes(fcmToken)) {
+      user.fcmTokens.push(fcmToken);
+      await user.save();
+      console.log(`🔥 FCM token registered for user ${decoded.userId}: ${fcmToken}`);
+    }
+
+    res.json({ success: true, message: 'FCM token registered' });
+  } catch (error) {
+    console.error('FCM token registration error:', error);
+    res.status(401).json({ success: false, message: 'Invalid or expired token' });
+  }
+});
+
+// @route   DELETE /api/auth/fcm-token
+// @desc    Unregister an FCM token
+// @access  Private
+router.delete('/fcm-token', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ success: false, message: 'No token provided' });
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const { fcmToken } = req.body;
+
+    const user = await User.findById(decoded.userId);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    if (user.fcmTokens) {
+      user.fcmTokens = user.fcmTokens.filter(t => t !== fcmToken);
+      await user.save();
+      console.log(`🔥 FCM token removed for user ${decoded.userId}: ${fcmToken}`);
+    }
+
+    res.json({ success: true, message: 'FCM token unregistered' });
+  } catch (error) {
+    console.error('FCM token unregistration error:', error);
+    res.status(401).json({ success: false, message: 'Invalid or expired token' });
+  }
+});
+
 export default router;

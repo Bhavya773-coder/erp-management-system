@@ -4,6 +4,7 @@ import Message from '../models/Message.js';
 import VoucherSequence from '../models/VoucherSequence.js';
 import { sendPushNotification } from '../utils/pushNotification.js';
 import { sendExpoPushNotifications } from '../utils/expoPush.js';
+import { sendFCMNotifications } from '../services/firebaseService.js';
 import mongoose from 'mongoose';
 
 // Store connected users: { userId: socketId }
@@ -71,7 +72,7 @@ export const setupSocketHandlers = (io) => {
 
     // Handle send message
     socket.on('message:send', async (data) => {
-      const { chatId, content, messageType = 'TEXT', fileUrl, fileName, fileSize, scheduleDate, tempId, forwarded, forwardCount, voucherData } = data;
+      const { chatId, content, messageType = 'TEXT', fileUrl, fileName, fileSize, scheduleDate, tempId, forwarded, forwardCount, voucherData, taskData } = data;
       
       try {
         // Verify user is member of chat
@@ -94,7 +95,7 @@ export const setupSocketHandlers = (io) => {
           const seqDoc = await VoucherSequence.findOneAndUpdate(
             { companyPrefix: prefix },
             { $inc: { seq: 1 } },
-            { new: true, upsert: true }
+            { returnDocument: 'after', upsert: true }
           );
           const number = `${prefix}-${seqDoc.seq.toString().padStart(3, '0')}`;
           finalVoucherData = { ...voucherData, number, status: 'PENDING' };
@@ -113,6 +114,7 @@ export const setupSocketHandlers = (io) => {
           forwarded: forwarded || false,
           forwardCount: forwardCount || 0,
           voucherData: finalVoucherData,
+          taskData: taskData,
           status: 'SENT'
         });
 
@@ -132,6 +134,7 @@ export const setupSocketHandlers = (io) => {
           forwarded: populatedMessage.forwarded,
           forwardCount: populatedMessage.forwardCount,
           voucherData: populatedMessage.voucherData,
+          taskData: populatedMessage.taskData,
           createdAt: populatedMessage.createdAt,
           senderId: populatedMessage.sender._id.toString(),
           sender: {
@@ -142,8 +145,8 @@ export const setupSocketHandlers = (io) => {
         };
 
         // Update chat updatedAt
-        const updatedChat = await Chat.findByIdAndUpdate(chatId, { updatedAt: Date.now() }, { new: true })
-          .populate('members.user', 'name email avatarUrl isOnline lastSeen phone education skills role pushSubscription expoPushTokens');
+        const updatedChat = await Chat.findByIdAndUpdate(chatId, { updatedAt: Date.now() }, { returnDocument: 'after' })
+          .populate('members.user', 'name email avatarUrl isOnline lastSeen phone education skills role pushSubscription expoPushTokens fcmTokens');
 
         // Prepare full chat object for sidebar sync
         const validMembers = updatedChat.members.filter(m => m.user);
@@ -186,10 +189,12 @@ export const setupSocketHandlers = (io) => {
             // --- Web Push (browser) ---
             const pushSubscription = member.user.pushSubscription;
             
-            if (pushSubscription) {
+              if (pushSubscription) {
               const pushPayload = {
                 title: `New message from ${formattedMessage.sender.name}`,
-                body: formattedMessage.messageType === 'TEXT' ? formattedMessage.content : `Sent a ${formattedMessage.messageType.toLowerCase()}`,
+                body: formattedMessage.messageType === 'TEXT' ? formattedMessage.content : 
+                      formattedMessage.messageType === 'TASK' ? `⏰ Task Assigned: ${formattedMessage.taskData?.title}` : 
+                      `Sent a ${formattedMessage.messageType.toLowerCase()}`,
                 icon: '/logo.png',
                 badge: '/logo.png',
                 tag: formattedMessage.id,
@@ -212,32 +217,48 @@ export const setupSocketHandlers = (io) => {
               }).catch(err => console.error(`❌ Web push failed for user ${userId}:`, err));
             }
 
-            // --- Expo Push (mobile — Android & iOS) ---
-            const expoPushTokens = member.user.expoPushTokens;
-            if (expoPushTokens && expoPushTokens.length > 0) {
-              const chatName = updatedChat.isGroup ? updatedChat.name : formattedMessage.sender.name;
-              const subtitle = updatedChat.isGroup ? formattedMessage.sender.name : undefined;
-              
-              let body = formattedMessage.content || '';
-              if (formattedMessage.messageType === 'IMAGE') body = '📷 Photo';
-              else if (formattedMessage.messageType === 'FILE') body = '📄 ' + (formattedMessage.fileName || 'Document');
-              else if (formattedMessage.messageType === 'SCHEDULE') body = '📅 Schedule';
+              let pushBody = formattedMessage.content || '';
+              if (formattedMessage.messageType === 'IMAGE') pushBody = '📷 Photo';
+              else if (formattedMessage.messageType === 'FILE') pushBody = '📄 ' + (formattedMessage.fileName || 'Document');
+              else if (formattedMessage.messageType === 'SCHEDULE') pushBody = '📅 Schedule';
+              else if (formattedMessage.messageType === 'TASK') pushBody = `⏰ Task Assigned: ${formattedMessage.taskData?.title}`;
 
-              sendExpoPushNotifications(expoPushTokens, {
-                title: chatName,
-                subtitle,
-                body,
-                sound: 'default',
-                badge: 1,
-                channelId: 'messages',
-                data: {
-                  chatId: formattedMessage.chatId,
-                  messageId: formattedMessage.id,
-                  senderName: formattedMessage.sender.name,
-                  type: 'message'
-                }
-              });
-            }
+              const fcmTokens = member.user.fcmTokens;
+              const expoPushTokens = member.user.expoPushTokens;
+
+              // --- Direct FCM (Firebase Admin SDK) ---
+              // This is the "Native" notification the user wants
+              if (fcmTokens && fcmTokens.length > 0) {
+                const chatName = updatedChat.isGroup ? updatedChat.name : formattedMessage.sender.name;
+                getUserTotalUnreadCount(userId).then(totalUnread => {
+                  sendFCMNotifications(fcmTokens, {
+                    title: chatName,
+                    body: pushBody,
+                    badge: totalUnread,
+                    data: { chatId: formattedMessage.chatId, type: 'message' }
+                  });
+                });
+              } else if (expoPushTokens && expoPushTokens.length > 0) {
+                // --- Expo Push (Fallback) ---
+                const chatName = updatedChat.isGroup ? updatedChat.name : formattedMessage.sender.name;
+                const subtitle = updatedChat.isGroup ? formattedMessage.sender.name : undefined;
+                getUserTotalUnreadCount(userId).then(totalUnread => {
+                  sendExpoPushNotifications(expoPushTokens, {
+                    title: chatName,
+                    subtitle,
+                    body: pushBody,
+                    sound: 'default',
+                    badge: totalUnread,
+                    channelId: 'messages',
+                    data: {
+                      chatId: formattedMessage.chatId,
+                      messageId: formattedMessage.id,
+                      senderName: formattedMessage.sender.name,
+                      type: 'message'
+                    }
+                  });
+                });
+              }
           }
         });
 
@@ -251,6 +272,51 @@ export const setupSocketHandlers = (io) => {
       }
     });
 
+    // Handle task action
+    socket.on('task:action', async (data) => {
+      const { messageId, action } = data; // action: 'COMPLETED'
+      try {
+        const message = await Message.findById(messageId).populate('sender', 'name').populate('chat');
+        if (!message || message.messageType !== 'TASK') return;
+        
+        message.set({
+          'taskData.status': action,
+          'taskData.completedAt': new Date()
+        });
+        
+        await message.save();
+        
+        io.to(`chat:${message.chat._id.toString()}`).emit('message:update', {
+          messageId: message._id.toString(),
+          chatId: message.chat._id.toString(),
+          taskData: message.taskData
+        });
+
+        // Notify the sender that the task was completed
+        const senderUser = await User.findById(message.sender._id);
+        const taskTitle = message.taskData.title;
+        const chatName = message.chat.isGroup ? message.chat.name : 'Task Update';
+
+        if (senderUser) {
+          if (senderUser.fcmTokens && senderUser.fcmTokens.length > 0) {
+            sendFCMNotifications(senderUser.fcmTokens, {
+              title: `Task Completed`,
+              body: `Task "${taskTitle}" has been completed.`,
+              data: { type: 'task', chatId: message.chat._id.toString() }
+            });
+          } else if (senderUser.expoPushTokens && senderUser.expoPushTokens.length > 0) {
+            sendExpoPushNotifications(senderUser.expoPushTokens, {
+              title: `Task Completed`,
+              body: `Task "${taskTitle}" has been completed.`,
+              data: { type: 'task', chatId: message.chat._id.toString() }
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Task action error:', err);
+      }
+    });
+
     // Handle voucher action
     socket.on('voucher:action', async (data) => {
       const { messageId, action } = data;
@@ -258,8 +324,21 @@ export const setupSocketHandlers = (io) => {
         const message = await Message.findById(messageId).populate('sender', 'name').populate('chat');
         if (!message || message.messageType !== 'VOUCHER') return;
         
-        message.voucherData.status = action;
+        const approver = await User.findById(socket.userId);
+        console.log('📝 Processing voucher action:', action, 'by', approver?.name || socket.userId);
+        
+        if (action === 'APPROVED') {
+          message.set({
+            'voucherData.status': action,
+            'voucherData.approvedBy': approver ? approver.name : 'Admin',
+            'voucherData.approvedAt': new Date()
+          });
+        } else {
+          message.set('voucherData.status', action);
+        }
+        
         await message.save();
+        console.log('💾 Voucher saved successfully with approver:', message.voucherData.approvedBy);
         
         io.to(`user:${message.sender._id.toString()}`).emit('message:update', {
           messageId: message._id.toString(),
@@ -279,6 +358,14 @@ export const setupSocketHandlers = (io) => {
              body: `Voucher ${message.voucherData.number} has been ${action.toLowerCase()}.`,
              data: { type: 'voucher', chatId: message.chat._id.toString() }
            });
+        }
+
+        if (senderUser && senderUser.fcmTokens && senderUser.fcmTokens.length > 0) {
+          sendFCMNotifications(senderUser.fcmTokens, {
+            title: `Voucher ${action}`,
+            body: `Voucher ${message.voucherData.number} has been ${action.toLowerCase()}.`,
+            data: { type: 'voucher', chatId: message.chat._id.toString() }
+          });
         }
 
         if (action === 'APPROVED') {
@@ -393,11 +480,21 @@ export const setupSocketHandlers = (io) => {
       const { chatId } = data;
       
       try {
+        const now = new Date();
+        
+        // Update user's lastSeen in this chat
+        await Chat.updateOne(
+          { _id: chatId, 'members.user': socket.userId },
+          { $set: { 'members.$.lastSeen': now } }
+        );
+
+        // Optional: Still mark messages as seen for legacy/single-status support
         await Message.updateMany(
           {
             chat: chatId,
             sender: { $ne: socket.userId },
-            status: { $ne: 'SEEN' }
+            status: { $ne: 'SEEN' },
+            createdAt: { $lte: now }
           },
           { $set: { status: 'SEEN' } }
         );
@@ -549,6 +646,30 @@ async function markMessagesDelivered(chatId, userId) {
     );
   } catch (error) {
     console.error('Mark delivered error:', error);
+  }
+}
+
+async function getUserTotalUnreadCount(userId) {
+  try {
+    const userChats = await Chat.find({ 'members.user': userId });
+    let totalUnread = 0;
+
+    for (const chat of userChats) {
+      const member = chat.members.find(m => m.user.toString() === userId.toString());
+      if (member) {
+        const unreadInChat = await Message.countDocuments({
+          chat: chat._id,
+          sender: { $ne: userId },
+          createdAt: { $gt: member.lastSeen }
+        });
+        totalUnread += unreadInChat;
+      }
+    }
+    
+    return totalUnread;
+  } catch (error) {
+    console.error('Error calculating total unread:', error);
+    return 0;
   }
 }
 

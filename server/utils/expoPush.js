@@ -50,7 +50,9 @@ export const sendExpoPushNotifications = async (expoPushTokens, payload) => {
         if (ticket.status === 'ok') {
           console.log(`✅ Expo push sent to ${chunk[idx].to}`);
         } else if (ticket.status === 'error') {
-          console.error(`❌ Expo push error: ${ticket.message}`);
+          if (!ticket.message?.includes('FCM server key')) {
+            console.error(`❌ Expo push error: ${ticket.message}`);
+          }
           // If the token is invalid, mark it for removal
           if (ticket.details?.error === 'DeviceNotRegistered') {
             console.log(`🗑️ Token ${chunk[idx].to} is no longer valid`);

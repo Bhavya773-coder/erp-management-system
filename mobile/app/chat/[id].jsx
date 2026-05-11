@@ -16,9 +16,64 @@ import { useSocket } from '../../hooks/useSocket';
 import { fileAPI } from '../../lib/api';
 import { useTheme, Fonts, Spacing, BorderRadius } from '@/constants/appTheme';
 import { API_BASE_URL } from '@/constants/config';
-import { format } from 'date-fns';
+import { format, differenceInSeconds, isValid } from 'date-fns';
+import { Audio } from 'expo-av';
 import VoucherModal from '../../components/VoucherModal';
 import VoucherDetailModal from '../../components/VoucherDetailModal';
+import TaskModal from '../../components/TaskModal';
+import TaskDetailModal from '../../components/TaskDetailModal';
+
+const formatTime = (timeStr) => {
+  if (!timeStr) return '--:--';
+  const d = new Date(timeStr);
+  return isValid(d) ? format(d, 'HH:mm') : '--:--';
+};
+
+const getMediaUrl = (url) => {
+  if (!url) return '';
+  if (!url.startsWith('http')) return `${API_BASE_URL}${url}`;
+  const oldIps = ['http://192.168.16.127:5000', 'http://127.0.0.1:5000', 'http://localhost:5000'];
+  let sanitizedUrl = url;
+  oldIps.forEach(ip => {
+    if (sanitizedUrl.startsWith(ip)) sanitizedUrl = sanitizedUrl.replace(ip, API_BASE_URL);
+  });
+  return sanitizedUrl;
+};
+
+const LiveTimer = ({ endTime, completedAt, status }) => {
+  const [timeLeft, setTimeLeft] = useState('');
+
+  useEffect(() => {
+    if (status !== 'PENDING') return;
+    let int;
+    const update = () => {
+      const diff = Math.max(0, new Date(endTime).getTime() - Date.now());
+      if (diff <= 0) {
+        setTimeLeft('00:00:00');
+        if (int) clearInterval(int);
+        return;
+      }
+      const d = Math.floor(diff / 86400000);
+      const h = Math.floor((diff % 86400000) / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      let str = '';
+      if (d > 0) str += `${d}d `;
+      str += `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+      setTimeLeft(str);
+    };
+    update();
+    int = setInterval(update, 1000);
+    return () => clearInterval(int);
+  }, [endTime, status]);
+
+  if (status === 'COMPLETED') return <Text style={{ color: '#FFF', fontWeight: 'bold' }}>COMPLETED at {formatTime(completedAt)}</Text>;
+  
+  const diff = Math.max(0, new Date(endTime).getTime() - Date.now());
+  if (diff <= 0) return <Text style={{ color: '#FFF', fontWeight: 'bold' }}>EXPIRED</Text>;
+
+  return <Text style={{ color: '#FFF', fontWeight: 'bold' }}>PENDING: ends in {timeLeft || '--:--:--'}</Text>;
+};
 
 const { width, height } = Dimensions.get('window');
 
@@ -84,7 +139,7 @@ const s = StyleSheet.create({
   viewerImage: { width: '100%', height: '100%' }
 });
 
-const MessageItem = memo(({ msg, myId, currentChat, isMe, Colors, isSelected, onLongPress, onPress, onImagePress, onVoucherAction }) => {
+const MessageItem = memo(({ msg, myId, currentChat, isMe, Colors, isSelected, onLongPress, onPress, onImagePress, onVoucherAction, onTaskAction }) => {
   const showSender = currentChat?.isGroup && !isMe;
   const time = msg.createdAt ? format(new Date(msg.createdAt), 'HH:mm') : '';
 
@@ -124,8 +179,8 @@ const MessageItem = memo(({ msg, myId, currentChat, isMe, Colors, isSelected, on
             {msg.fileUrl && (
               <View style={s.voucherSuppGrid}>
                 {msg.fileUrl.split(',').slice(0, 4).map((url, idx) => (
-                  <TouchableOpacity key={idx} activeOpacity={0.8} onPress={() => onImagePress(msg, url.startsWith('http') ? url : `${API_BASE_URL}${url}`)} style={s.voucherSuppImg}>
-                    <Image source={{ uri: url.startsWith('http') ? url : `${API_BASE_URL}${url}` }} style={{ width: '100%', height: '100%' }} />
+                  <TouchableOpacity key={idx} activeOpacity={0.8} onPress={() => onImagePress(msg, getMediaUrl(url))} style={s.voucherSuppImg}>
+                    <Image source={{ uri: getMediaUrl(url) }} style={{ width: '100%', height: '100%' }} />
                   </TouchableOpacity>
                 ))}
               </View>
@@ -155,7 +210,7 @@ const MessageItem = memo(({ msg, myId, currentChat, isMe, Colors, isSelected, on
             {msg.fileUrl && msg.fileUrl.includes(',') ? (
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', width: 210, justifyContent: 'space-between' }}>
                 {msg.fileUrl.split(',').slice(0, 4).map((url, idx, arr) => {
-                  const fullUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
+                  const fullUrl = getMediaUrl(url);
                   const total = msg.fileUrl.split(',').length;
                   return (
                     <TouchableOpacity key={idx} activeOpacity={0.8} onPress={() => onImagePress(msg, fullUrl)} style={{ width: 100, height: 100, marginBottom: 5 }}>
@@ -170,14 +225,33 @@ const MessageItem = memo(({ msg, myId, currentChat, isMe, Colors, isSelected, on
                 })}
               </View>
             ) : (
-              <TouchableOpacity activeOpacity={0.8} onPress={() => onImagePress(msg, msg.fileUrl?.startsWith('http') ? msg.fileUrl : `${API_BASE_URL}${msg.fileUrl}`)}>
-                <Image source={{ uri: msg.fileUrl?.startsWith('http') ? msg.fileUrl : `${API_BASE_URL}${msg.fileUrl}` }} style={s.messageImage} />
+              <TouchableOpacity activeOpacity={0.8} onPress={() => onImagePress(msg, getMediaUrl(msg.fileUrl))}>
+                <Image source={{ uri: getMediaUrl(msg.fileUrl) }} style={s.messageImage} />
               </TouchableOpacity>
             )}
             {msg.content && <Text style={[s.msgText, { color: Colors.textPrimary, marginTop: 4 }]}>{msg.content}</Text>}
           </View>
         ) : msg.messageType === 'FILE' ? (
           <View style={s.fileBox}><Ionicons name="document" size={24} color={Colors.accent} /><Text style={[s.fileName, { color: Colors.textPrimary }]} numberOfLines={1}>{msg.fileName}</Text></View>
+        ) : msg.messageType === 'TASK' ? (
+          <View style={[s.voucherBox, { backgroundColor: Colors.bgSecondary }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+              <Ionicons name="alarm" size={24} color="#FF9800" style={{ marginRight: 8 }} />
+              <Text style={{ color: Colors.textPrimary, fontWeight: 'bold', fontSize: 16, flex: 1 }}>{msg.taskData?.title}</Text>
+            </View>
+            <Text style={{ color: Colors.textSecondary, marginBottom: 4 }}>Assigned to: {msg.taskData?.assignedToName}</Text>
+            {msg.taskData?.description ? <Text style={{ color: Colors.textPrimary, marginBottom: 8 }}>{msg.taskData.description}</Text> : null}
+            
+            <View style={[s.voucherStatusBadge, { backgroundColor: msg.taskData?.status === 'PENDING' ? '#FF9800' : '#4CAF50' }]}>
+              <LiveTimer endTime={msg.taskData?.endTime} status={msg.taskData?.status} completedAt={msg.taskData?.completedAt} />
+            </View>
+            
+            {msg.taskData?.status === 'PENDING' && msg.taskData?.assignedTo === myId && (
+              <TouchableOpacity style={[s.voucherBtn, { backgroundColor: '#4CAF50', marginTop: 8 }]} onPress={() => onTaskAction(msg.id || msg._id, 'COMPLETED')}>
+                <Text style={s.voucherBtnText}>Mark Completed</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         ) : (
           <Text style={[s.msgText, { color: Colors.textPrimary }]}>{msg.content}</Text>
         )}
@@ -192,6 +266,7 @@ const MessageItem = memo(({ msg, myId, currentChat, isMe, Colors, isSelected, on
   return prev.isSelected === next.isSelected && 
          prev.msg.status === next.msg.status && 
          prev.msg.voucherData?.status === next.msg.voucherData?.status &&
+         prev.msg.taskData?.status === next.msg.taskData?.status &&
          prev.msg.id === next.msg.id;
 });
 
@@ -203,7 +278,7 @@ export default function ChatScreen() {
   const insets = useSafeAreaInsets();
   const { user, token } = useAuthStore();
   const { currentChat, messages, fetchChat, typingUsers, addMessage, loadMoreMessages, hasMore, isLoading } = useChatStore();
-  const { joinChat, leaveChat, sendMessage, startTyping, stopTyping, markMessagesSeen, deleteMessageSocket, sendVoucherAction } = useSocket(token);
+  const { socket, joinChat, leaveChat, sendMessage, startTyping, stopTyping, markMessagesSeen, deleteMessageSocket, sendVoucherAction, onTaskAction } = useSocket(token);
 
   const [text, setText] = useState('');
   const isAndroid = Platform.OS === 'android';
@@ -213,9 +288,16 @@ export default function ChatScreen() {
   const [viewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
   const [kbVisible, setKbVisible] = useState(false);
+  const [kbHeight, setKbHeight] = useState(0);
   const [voucherVisible, setVoucherVisible] = useState(false);
+  const [taskModalVisible, setTaskModalVisible] = useState(false);
+  const [ringingTask, setRingingTask] = useState(null);
+  const soundRef = useRef(null);
+  const vibrationIntervalRef = useRef(null);
   const [selectedVoucher, setSelectedVoucher] = useState(null);
   const [voucherDetailVisible, setVoucherDetailVisible] = useState(false);
+  const [selectedTask, setSelectedTask] = useState(null);
+  const [taskDetailVisible, setTaskDetailVisible] = useState(false);
   
   const isFirstLoad = useRef(true);
   const skipScroll = useRef(false);
@@ -230,7 +312,7 @@ export default function ChatScreen() {
         images.push({
           id: `${m.id || m._id}_${index}`,
           msgId: m.id || m._id,
-          url: url.startsWith('http') ? url : `${API_BASE_URL}${url}`,
+          url: getMediaUrl(url),
           sender: m.sender?.name,
           time: m.createdAt
         });
@@ -257,6 +339,61 @@ export default function ChatScreen() {
       if (chatId) leaveChat(chatId);
     };
   }, [chatId]);
+
+  // Task Alarm Logic
+  useEffect(() => {
+    let timers = [];
+    messages.forEach(m => {
+      if (m.messageType === 'TASK' && m.taskData?.status === 'PENDING' && m.taskData?.assignedTo === myId) {
+        const timeDiff = new Date(m.taskData.endTime).getTime() - Date.now();
+        if (timeDiff <= 0 && !ringingTask) {
+          triggerAlarm(m);
+        } else if (timeDiff > 0 && timeDiff < 86400000) { // only schedule if within a day to avoid memory bloat
+          const t = setTimeout(() => triggerAlarm(m), timeDiff);
+          timers.push(t);
+        }
+      }
+    });
+    return () => timers.forEach(clearTimeout);
+  }, [messages, myId, ringingTask]);
+
+  const triggerAlarm = async (taskMsg) => {
+    if (ringingTask) return;
+    setRingingTask(taskMsg);
+    try {
+      // Loop vibration for continuous buzz using expo-haptics
+      vibrationIntervalRef.current = setInterval(() => {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }, 1500);
+      // Play sound
+      const { sound } = await Audio.Sound.createAsync(
+        require('../../assets/images/favicon.png'), // fallback to no crash if no audio file exists, expo-av will just fail gracefully
+        { shouldPlay: true, isLooping: true }
+      );
+      soundRef.current = sound;
+    } catch (err) {
+      console.log('Audio init skipped or failed (safe fallback to vibration only):', err.message);
+    }
+  };
+
+  const stopAlarm = async (action) => {
+    if (vibrationIntervalRef.current) {
+      clearInterval(vibrationIntervalRef.current);
+      vibrationIntervalRef.current = null;
+    }
+    if (soundRef.current) {
+      await soundRef.current.stopAsync().catch(() => {});
+      await soundRef.current.unloadAsync().catch(() => {});
+      soundRef.current = null;
+    }
+    if (action === 'COMPLETED' && ringingTask) {
+      onTaskAction(ringingTask.id || ringingTask._id, 'COMPLETED');
+    }
+    setRingingTask(null);
+  };
+
+  // removed local onTaskAction
+
 
   useEffect(() => {
     const backAction = () => {
@@ -292,12 +429,18 @@ export default function ChatScreen() {
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const showSub = Keyboard.addListener(showEvent, () => {
+    const showSub = Keyboard.addListener(showEvent, (e) => {
       setKbVisible(true);
+      if (Platform.OS === 'android' && e.endCoordinates) {
+        setKbHeight(e.endCoordinates.height);
+      }
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 150);
     });
     const hideSub = Keyboard.addListener(hideEvent, () => {
       setKbVisible(false);
+      if (Platform.OS === 'android') {
+        setKbHeight(0);
+      }
     });
     return () => { showSub.remove(); hideSub.remove(); };
   }, []);
@@ -393,9 +536,10 @@ export default function ChatScreen() {
         onPress={handlePress} 
         onImagePress={handleImagePress} 
         onVoucherAction={sendVoucherAction}
+        onTaskAction={onTaskAction}
       />
     );
-  }, [myId, currentChat, Colors, selectedIds, handleLongPress, handlePress, handleImagePress, sendVoucherAction]);
+  }, [myId, currentChat, Colors, selectedIds, handleLongPress, handlePress, handleImagePress, sendVoucherAction, onTaskAction]);
 
   const handleLongPress = useCallback((m) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -411,6 +555,9 @@ export default function ChatScreen() {
     } else if (m.messageType === 'VOUCHER') {
       setSelectedVoucher(m);
       setVoucherDetailVisible(true);
+    } else if (m.messageType === 'TASK') {
+      setSelectedTask(m);
+      setTaskDetailVisible(true);
     }
   }, [selectedIds]);
 
@@ -450,10 +597,11 @@ export default function ChatScreen() {
           <TouchableOpacity style={s.attachItem} onPress={() => pickImage(true)}><View style={[s.attachIcon, { backgroundColor: '#FF5722' }]}><Ionicons name="camera" size={24} color="#FFF" /></View><Text style={{ color: Colors.textPrimary }}>Camera</Text></TouchableOpacity>
           <TouchableOpacity style={s.attachItem} onPress={async () => { const r = await DocumentPicker.getDocumentAsync(); if (!r.canceled) { const up = await fileAPI.uploadFile(r.assets[0].uri, r.assets[0].name, r.assets[0].mimeType); handleSend(up.data.data.fileName, 'FILE', up.data.data); } setShowAttachments(false); }}><View style={[s.attachIcon, { backgroundColor: '#1C98F7' }]}><Ionicons name="document" size={24} color="#FFF" /></View><Text style={{ color: Colors.textPrimary }}>Document</Text></TouchableOpacity>
           <TouchableOpacity style={s.attachItem} onPress={() => { setShowAttachments(false); setVoucherVisible(true); }}><View style={[s.attachIcon, { backgroundColor: '#FF9800' }]}><Ionicons name="receipt" size={24} color="#FFF" /></View><Text style={{ color: Colors.textPrimary }}>Voucher</Text></TouchableOpacity>
+          <TouchableOpacity style={s.attachItem} onPress={() => { setShowAttachments(false); setTaskModalVisible(true); }}><View style={[s.attachIcon, { backgroundColor: '#E91E63' }]}><Ionicons name="alarm" size={24} color="#FFF" /></View><Text style={{ color: Colors.textPrimary }}>Task</Text></TouchableOpacity>
         </View>
       )}
       
-      <View style={[s.inputContainer, { paddingBottom: kbVisible ? 4 : Math.max(insets.bottom, 6) }]}>
+      <View style={[s.inputContainer, { paddingBottom: Platform.OS === 'android' ? Math.max(insets.bottom, 8) + kbHeight : Math.max(insets.bottom, 8) }]}>
         <View style={s.inputBubble}>
           <TouchableOpacity onPress={() => setShowAttachments(!showAttachments)} style={s.attachBtn}>
             <Ionicons name={showAttachments ? "close" : "add"} size={26} color={Colors.textMuted} />
@@ -508,8 +656,8 @@ export default function ChatScreen() {
 
       <KeyboardAvoidingView 
         style={s.flex} 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
-        keyboardVerticalOffset={insets.top + 60}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 60 : 0}
       >
         {chatBody}
       </KeyboardAvoidingView>
@@ -524,10 +672,72 @@ export default function ChatScreen() {
 
       <VoucherDetailModal
         visible={voucherDetailVisible}
-        voucher={selectedVoucher}
-        onClose={() => setVoucherDetailVisible(false)}
+        voucher={messages.find(m => (m.id || m._id) === (selectedVoucher?.id || selectedVoucher?._id))}
+        onClose={() => { setVoucherDetailVisible(false); setSelectedVoucher(null); }}
         onImagePress={handleImagePress}
       />
+
+      <TaskDetailModal
+        visible={taskDetailVisible}
+        task={selectedTask}
+        onClose={() => { setTaskDetailVisible(false); setSelectedTask(null); }}
+        onComplete={() => onTaskAction(selectedTask?.id || selectedTask?._id, 'COMPLETED')}
+        myId={myId}
+      />
+
+      <TaskModal 
+        visible={taskModalVisible}
+        onClose={() => setTaskModalVisible(false)}
+        chatMembers={currentChat?.members?.map(m => m.user)}
+        isGroup={currentChat?.isGroup}
+        myId={myId}
+        onSend={(taskData) => {
+          handleSend('Task Assigned', 'TASK', { taskData });
+        }}
+      />
+
+      {/* Subtle Task Alarm Banner - Non-blocking */}
+      {!!ringingTask && (
+        <View style={{ 
+          position: 'absolute', 
+          top: insets.top + 65, 
+          left: 10, 
+          right: 10, 
+          backgroundColor: '#333', 
+          borderRadius: 12, 
+          padding: 12, 
+          flexDirection: 'row', 
+          alignItems: 'center', 
+          elevation: 5, 
+          shadowColor: '#000', 
+          shadowOffset: { width: 0, height: 2 }, 
+          shadowOpacity: 0.3, 
+          shadowRadius: 4,
+          zIndex: 9999
+        }}>
+          <View style={{ backgroundColor: '#FF9800', width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
+            <Ionicons name="alarm" size={24} color="#FFF" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 14 }} numberOfLines={1}>Task Alert: {ringingTask?.taskData?.title}</Text>
+            <Text style={{ color: '#CCC', fontSize: 12 }}>Time is up!</Text>
+          </View>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity 
+              style={{ backgroundColor: '#4CAF50', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }} 
+              onPress={() => stopAlarm('COMPLETED')}
+            >
+              <Text style={{ color: '#FFF', fontSize: 12, fontWeight: 'bold' }}>Done</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={{ backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }} 
+              onPress={() => stopAlarm('DISMISS')}
+            >
+              <Text style={{ color: '#FFF', fontSize: 12 }}>Hide</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       <Modal visible={viewerVisible} transparent animationType="fade">
         <SafeAreaView style={s.viewerContainer}>

@@ -2,10 +2,17 @@ import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, Fonts, Spacing, BorderRadius } from '@/constants/appTheme';
+import { useChatStore } from '../../store/chatStore';
+import { useMemo } from 'react';
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const Colors = useTheme();
+  const { chats } = useChatStore();
+
+  const totalUnread = useMemo(() => {
+    return chats.reduce((sum, chat) => sum + (chat.unreadCount || 0), 0);
+  }, [chats]);
 
   return (
     <Tabs
@@ -34,6 +41,13 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="chatbubbles" size={size} color={color} />
           ),
+          tabBarBadge: totalUnread > 0 ? totalUnread : null,
+          tabBarBadgeStyle: {
+            backgroundColor: Colors.unreadBadge,
+            color: Colors.bgPrimary,
+            fontSize: 10,
+            lineHeight: 15,
+          },
         }}
       />
       <Tabs.Screen

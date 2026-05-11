@@ -7,6 +7,12 @@ import { useSocket } from '../hooks/useSocket';
 import { useThemeStore } from '../store/themeStore';
 import { useTheme } from '@/constants/appTheme';
 import { authAPI } from '../lib/api';
+import * as NavigationBar from 'expo-navigation-bar';
+
+if (Platform.OS === 'android') {
+  NavigationBar.setVisibilityAsync('hidden');
+  NavigationBar.setBehaviorAsync('overlay-swipe');
+}
 
 // Lazy-load expo-notifications to prevent crashes in Expo Go
 let Notifications = null;
@@ -167,16 +173,9 @@ export default function RootLayout() {
 
 // ─── Push Token Registration ─────────────────────────────────────────────
 async function registerForPushNotifications() {
-  const { notificationsEnabled } = useThemeStore.getState();
-  if (!notificationsEnabled) return;
+  if (!Notifications) return;
   
-  if (!Notifications) {
-    console.warn('🔕 Notifications module not available (Expo Go limitation)');
-    return;
-  }
-
   try {
-    // 1. Check permission
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
 
@@ -190,45 +189,43 @@ async function registerForPushNotifications() {
       return;
     }
 
-    // 2. Android notification channel
-    if (Platform.OS === 'android' && Notifications.setNotificationChannelAsync) {
+    // Android notification channel setup
+    if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('messages', {
         name: 'Messages',
         importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 250, 250, 250],
         lightColor: '#25D366',
-        sound: 'default',
-        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-        enableLights: true,
-        enableVibrate: true,
         showBadge: true,
       });
     }
 
-    // 3. Get Expo push token
-    let pushTokenData;
+    // Get the token specifically for this standalone app
+    const projectId = Constants?.expoConfig?.extra?.eas?.projectId;
+    const tokenData = await Notifications.getExpoPushTokenAsync({
+      ...(projectId ? { projectId } : {}),
+    });
+
+    const token = tokenData.data;
+    console.log('🚀 Standalone Expo Token:', token);
+
+    // Register Expo token with server
+    await authAPI.registerExpoPushToken(token);
+    
+    // ALSO get the native device token (FCM for Android, APNs for iOS)
+    // This is what Firebase Admin SDK uses directly
     try {
-      const projectId = Constants?.expoConfig?.extra?.eas?.projectId;
-      pushTokenData = await Notifications.getExpoPushTokenAsync({
-        ...(projectId ? { projectId } : {}),
-      });
-    } catch (tokenError) {
-      console.warn('⚠️ Could not get push token:', tokenError.message);
-      return;
+      const deviceTokenData = await Notifications.getDevicePushTokenAsync();
+      const deviceToken = deviceTokenData.data;
+      console.log('🔥 Native Device Token:', deviceToken);
+      await authAPI.registerFCMToken(deviceToken);
+    } catch (fcmError) {
+      console.warn('⚠️ Native token registration failed:', fcmError);
     }
 
-    const expoPushToken = pushTokenData.data;
-    console.log('🚀 Expo Push Token:', expoPushToken);
-
-    // 4. Register with server
-    try {
-      await authAPI.registerExpoPushToken(expoPushToken);
-      console.log('✅ Push token registered with server');
-    } catch (apiError) {
-      console.warn('⚠️ Failed to register token:', apiError.message);
-    }
+    console.log('✅ Registered successfully with server');
   } catch (error) {
-    console.error('❌ Notification setup error:', error);
+    console.error('❌ Notification registration failed:', error);
   }
 }
 

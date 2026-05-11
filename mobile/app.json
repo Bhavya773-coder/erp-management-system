@@ -24,7 +24,7 @@
       },
       "package": "com.arcadian.chat",
       "googleServicesFile": "./google-services.json",
-      "softwareKeyboardLayoutMode": "adjustResize"
+      "softwareKeyboardLayoutMode": "resize"
     },
     "web": {
       "bundler": "metro",

@@ -69,17 +69,25 @@ app.use((req, res, next) => {
 app.use('/uploads', express.static('uploads'));
 
 // Serve static files from the React app
-const distPath = path.join(__dirname, '../client/dist');
-console.log(`📂 Serving static files from: ${distPath}`);
+const distPath = path.resolve(__dirname, '..', 'client', 'dist');
+console.log(`📂 Attempting to serve static files from: ${distPath}`);
 
-if (!fs.existsSync(distPath)) {
-  console.error(`❌ ERROR: Static directory not found at ${distPath}`);
-} else {
-  const indexExists = fs.existsSync(path.join(distPath, 'index.html'));
+if (fs.existsSync(distPath)) {
   console.log(`✅ Static directory found at ${distPath}`);
-  console.log(`${indexExists ? '✅' : '❌'} index.html ${indexExists ? 'exists' : 'NOT found'} at ${path.join(distPath, 'index.html')}`);
+  const indexExists = fs.existsSync(path.join(distPath, 'index.html'));
+  console.log(`${indexExists ? '✅' : '❌'} index.html ${indexExists ? 'exists' : 'NOT found'}`);
+  app.use(express.static(distPath));
+} else {
+  console.error(`❌ ERROR: Static directory not found at ${distPath}`);
+  // Fallback for local dev if needed
+  const localDist = path.join(process.cwd(), 'client/dist');
+  if (fs.existsSync(localDist)) {
+     console.log(`✅ Found fallback dist at ${localDist}`);
+     app.use(express.static(localDist));
+  }
 }
-app.use(express.static(distPath));
+  }
+}
 
 // API Routes
 app.use('/api/auth', authRoutes);

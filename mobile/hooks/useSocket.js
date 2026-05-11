@@ -65,8 +65,8 @@ export const useSocket = (token) => {
       addMessage(message);
     });
 
-    socket.on('message:update', ({ messageId, chatId, voucherData }) => {
-      useChatStore.getState().updateMessage(chatId, messageId, { voucherData });
+    socket.on('message:update', ({ messageId, chatId, voucherData, taskData, ...rest }) => {
+      useChatStore.getState().updateMessage(chatId, messageId, { voucherData, taskData, ...rest });
     });
 
     socket.on('message:status_update', ({ chatId, status, messageId }) => {
@@ -183,6 +183,10 @@ export const useSocket = (token) => {
     if (socketRef.current) socketRef.current.emit('voucher:action', { messageId, action });
   }, []);
 
+  const onTaskAction = useCallback((messageId, action) => {
+    if (socketRef.current) socketRef.current.emit('task:action', { messageId, action });
+  }, []);
+
   return {
     socket: socketRef.current,
     joinChat,
@@ -194,5 +198,6 @@ export const useSocket = (token) => {
     markMessagesSeen,
     completeSchedule,
     sendVoucherAction,
+    onTaskAction
   };
 };

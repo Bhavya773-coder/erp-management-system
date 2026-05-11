@@ -162,7 +162,7 @@ router.put('/profile', authenticate, async (req, res) => {
           avatarUrl 
         } 
       },
-      { new: true }
+      { returnDocument: 'after' }
     ).select('-password');
 
     res.json({
@@ -217,7 +217,7 @@ router.put('/:id/role', authenticate, async (req, res) => {
     const updatedUser = await User.findByIdAndUpdate(
       id,
       { $set: { role } },
-      { new: true }
+      { returnDocument: 'after' }
     ).select('-password');
 
     if (!updatedUser) {

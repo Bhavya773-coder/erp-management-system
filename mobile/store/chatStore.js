@@ -41,10 +41,13 @@ export const useChatStore = create((set, get) => ({
   },
 
   fetchChat: async (chatId) => {
-    set({ isLoading: true, error: null });
     try {
+      const isSameChat = get().currentChat?.id === chatId;
+      if (!isSameChat) {
+        set({ isLoading: true, messages: [], error: null });
+      }
+      
       const response = await chatAPI.getChat(chatId);
-      // Fetch initial messages with pagination
       const msgRes = await messageAPI.getMessages(chatId, { page: 1, limit: 20 });
       set({
         currentChat: response.data.data.chat,
@@ -208,77 +211,88 @@ export const useChatStore = create((set, get) => ({
   },
 
   addMessage: (message) => {
+    console.log('📩 addMessage called for chatId:', message.chatId);
     set((state) => {
-      if (state.messages.find((m) => m.id === message.id)) return state;
+      // 1. Avoid duplicates
+      if (state.messages.some((m) => m.id === message.id)) return state;
 
-      const tempMessageIndex = state.messages.findIndex(
-        (m) =>
-          m.id === message.tempId ||
-          (m.tempId && m.tempId === message.tempId)
-      );
-
-      let newMessages;
-      if (tempMessageIndex !== -1) {
-        newMessages = [...state.messages];
-        newMessages[tempMessageIndex] = message;
+      // 2. Handle temp messages (sent from this device)
+      const tempId = message.tempId || message.id;
+      const tempIndex = state.messages.findIndex(m => m.id === tempId || m.tempId === tempId);
+      
+      let newMessages = [...state.messages];
+      if (tempIndex !== -1) {
+        newMessages[tempIndex] = message;
       } else {
-        newMessages = [...state.messages, message];
+        newMessages.push(message);
       }
 
-      const updatedChats = state.chats.map((chat) => {
-        if (chat.id === message.chatId) {
-          const isCurrentChat = state.currentChat?.id === message.chatId;
-          const myId =
-            useAuthStore.getState().user?.id ||
-            useAuthStore.getState().user?._id;
-          const isFromMe =
-            (message.senderId || message.sender?.id || message.sender?._id) ===
-            myId;
+      // 3. Update Chat List
+      const myId = useAuthStore.getState().user?.id || useAuthStore.getState().user?._id;
+      const chatIndex = state.chats.findIndex((c) => c.id === message.chatId);
+      
+      if (chatIndex === -1) {
+        console.log('🆕 New chat detected, fetching chats...');
+        get().fetchChats();
+        return { messages: newMessages };
+      }
 
-          return {
-            ...chat,
-            lastMessage: {
-              id: message.id,
-              content: message.content,
-              messageType: message.messageType,
-              createdAt: message.createdAt,
-              sender: message.sender,
-              status: message.status,
-            },
-            unreadCount:
-              !isCurrentChat && !isFromMe
-                ? (chat.unreadCount || 0) + 1
-                : 0,
-          };
-        }
-        return chat;
-      });
+      const updatedChats = [...state.chats];
+      const chat = updatedChats[chatIndex];
+      const isCurrentChat = state.currentChat?.id === message.chatId;
+      const isFromMe = (message.sender?.id || message.sender?._id || message.sender) === myId;
 
+      updatedChats[chatIndex] = {
+        ...chat,
+        lastMessage: message,
+        updatedAt: message.createdAt,
+        unreadCount: (!isCurrentChat && !isFromMe) 
+          ? (Number(chat.unreadCount) || 0) + 1 
+          : (isCurrentChat ? 0 : chat.unreadCount)
+      };
+
+      // 4. Sort chats by activity
       updatedChats.sort((a, b) => {
-        const aTime = a.lastMessage?.createdAt || a.createdAt;
-        const bTime = b.lastMessage?.createdAt || b.createdAt;
-        return new Date(bTime) - new Date(aTime);
+        const aTime = new Date(a.updatedAt || a.lastMessage?.createdAt || 0);
+        const bTime = new Date(b.updatedAt || b.lastMessage?.createdAt || 0);
+        return bTime - aTime;
       });
 
-      return { messages: newMessages, chats: updatedChats };
+      console.log(`✅ Updated counter for chat ${message.chatId}. New unread: ${updatedChats[chatIndex].unreadCount}`);
+      return { 
+        messages: newMessages, 
+        chats: updatedChats 
+      };
     });
   },
 
   updateMessage: (chatId, messageId, updates) => {
-    set((state) => ({
-      messages: state.messages.map((m) =>
-        m.id === messageId ? { ...m, ...updates } : m
-      ),
-      chats: state.chats.map((chat) => {
-        if (chat.id === chatId && chat.lastMessage?.id === messageId) {
-          return {
-            ...chat,
-            lastMessage: { ...chat.lastMessage, ...updates },
-          };
-        }
-        return chat;
-      }),
-    }));
+    set((state) => {
+      const updateObj = (m) => {
+        const newM = { ...m };
+        Object.keys(updates).forEach(key => {
+          if (key.includes('.')) {
+            const [parent, child] = key.split('.');
+            newM[parent] = { ...newM[parent], [child]: updates[key] };
+          } else if (typeof updates[key] === 'object' && updates[key] !== null && !Array.isArray(updates[key])) {
+            newM[key] = { ...newM[key], ...updates[key] };
+          } else {
+            newM[key] = updates[key];
+          }
+        });
+        return newM;
+      };
+
+      return {
+        messages: state.messages.map((m) => (m.id === messageId || m._id === messageId) ? updateObj(m) : m),
+        chats: state.chats.map((chat) => {
+          if (chat.id === chatId && (chat.lastMessage?.id === messageId || chat.lastMessage?._id === messageId)) {
+            return { ...chat, lastMessage: updateObj(chat.lastMessage) };
+          }
+          return chat;
+        }),
+      };
+    });
   },
 
   deleteMessage: (chatId, messageId) => {
@@ -429,6 +443,35 @@ export const useChatStore = create((set, get) => ({
       set({ users: response.data.data.users });
     } catch (error) {
       console.error('Failed to fetch users:', error);
+    }
+  },
+
+  registerPushNotifications: async () => {
+    try {
+      console.log('🔔 Registering for push notifications...');
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      if (finalStatus !== 'granted') {
+        console.log('❌ Failed to get push token for push notification!');
+        return;
+      }
+
+      const projectId = Constants?.expoConfig?.extra?.eas?.projectId;
+      console.log('Project ID for notifications:', projectId);
+
+      const pushTokenData = await Notifications.getExpoPushTokenAsync({
+        ...(projectId ? { projectId } : {}),
+      });
+      const expoPushToken = pushTokenData.data;
+      console.log('✅ Registered Expo Push Token:', expoPushToken);
+      
+      await authAPI.registerExpoPushToken(expoPushToken);
+    } catch (error) {
+      console.error('❌ Error registering for push notifications:', error);
     }
   },
 

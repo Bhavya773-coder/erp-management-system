@@ -9,7 +9,8 @@ import { fileAPI } from '../lib/api';
 const COMPANIES = [
   { label: 'Millennium Plaza', value: 'MP' },
   { label: 'Arcadia Shipping and Trading', value: 'AST' },
-  { label: 'Arcadia Engineering', value: 'AE' }
+  { label: 'Arcadia Engineering', value: 'AE' },
+  { label: 'Arvind Port and infra', value: 'APIL' }
 ];
 
 export default function VoucherModal({ visible, onClose, onSend }) {

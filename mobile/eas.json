@@ -14,6 +14,12 @@
         "buildType": "apk"
       }
     },
+    "production_apk": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    },
     "production": {}
   },
   "submit": {

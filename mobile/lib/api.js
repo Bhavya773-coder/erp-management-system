@@ -43,6 +43,8 @@ export const authAPI = {
   getMe: () => api.get('/auth/me'),
   registerExpoPushToken: (expoPushToken) => api.post('/auth/expo-push-token', { expoPushToken }),
   unregisterExpoPushToken: (expoPushToken) => api.delete('/auth/expo-push-token', { data: { expoPushToken } }),
+  registerFCMToken: (fcmToken) => api.post('/auth/fcm-token', { fcmToken }),
+  unregisterFCMToken: (fcmToken) => api.delete('/auth/fcm-token', { data: { fcmToken } }),
 };
 
 // ─── User APIs ──────────────────────────────────────────────────────────

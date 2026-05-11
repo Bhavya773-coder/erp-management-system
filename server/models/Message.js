@@ -9,13 +9,24 @@ const messageSchema = new mongoose.Schema({
   fileUrl: { type: String },
   fileName: { type: String },
   fileSize: { type: Number },
-  messageType: { type: String, enum: ['TEXT', 'FILE', 'IMAGE', 'SCHEDULE', 'VOUCHER'], default: 'TEXT' },
+  messageType: { type: String, enum: ['TEXT', 'FILE', 'IMAGE', 'SCHEDULE', 'VOUCHER', 'TASK'], default: 'TEXT' },
   voucherData: {
     company: { type: String },
     number: { type: String },
     amount: { type: Number },
     narration: { type: String },
-    status: { type: String, enum: ['PENDING', 'APPROVED', 'DENIED'], default: 'PENDING' }
+    status: { type: String, enum: ['PENDING', 'APPROVED', 'DENIED'], default: 'PENDING' },
+    approvedBy: { type: String },
+    approvedAt: { type: Date }
+  },
+  taskData: {
+    title: { type: String },
+    description: { type: String },
+    assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    assignedToName: { type: String },
+    endTime: { type: Date },
+    status: { type: String, enum: ['PENDING', 'COMPLETED'], default: 'PENDING' },
+    completedAt: { type: Date }
   },
   status: { type: String, enum: ['SENT', 'DELIVERED', 'SEEN'], default: 'SENT' },
   scheduleDate: { type: Date },
