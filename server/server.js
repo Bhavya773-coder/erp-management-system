@@ -70,22 +70,26 @@ app.use('/uploads', express.static('uploads'));
 
 // Serve static files from the React app
 const distPath = path.resolve(__dirname, '..', 'client', 'dist');
-console.log(`📂 Attempting to serve static files from: ${distPath}`);
+const indexFile = path.join(distPath, 'index.html');
+
+console.log(`📂 Environment Info:`);
+console.log(`   - __dirname: ${__dirname}`);
+console.log(`   - process.cwd(): ${process.cwd()}`);
+console.log(`   - distPath: ${distPath}`);
+console.log(`   - indexFile: ${indexFile}`);
 
 if (fs.existsSync(distPath)) {
   console.log(`✅ Static directory found at ${distPath}`);
-  const indexExists = fs.existsSync(path.join(distPath, 'index.html'));
-  console.log(`${indexExists ? '✅' : '❌'} index.html ${indexExists ? 'exists' : 'NOT found'}`);
+  const indexExists = fs.existsSync(indexFile);
+  console.log(`${indexExists ? '✅' : '❌'} index.html ${indexExists ? 'exists' : 'NOT found'} at ${indexFile}`);
   app.use(express.static(distPath));
 } else {
   console.error(`❌ ERROR: Static directory not found at ${distPath}`);
-  // Fallback for local dev if needed
-  const localDist = path.join(process.cwd(), 'client/dist');
+  // Fallback for local dev
+  const localDist = path.join(process.cwd(), 'client', 'dist');
   if (fs.existsSync(localDist)) {
      console.log(`✅ Found fallback dist at ${localDist}`);
      app.use(express.static(localDist));
-  }
-}
   }
 }
 
@@ -102,13 +106,23 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-// The "catchall" handler: for any request that doesn't
-// match one above, send back React's index.html file.
+// The "catchall" handler
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api')) {
     return res.status(404).json({ success: false, message: 'API route not found' });
   }
-  res.sendFile(path.join(distPath, 'index.html'));
+  
+  // Try to send index.html from distPath first, then local fallback
+  if (fs.existsSync(indexFile)) {
+    res.sendFile(indexFile);
+  } else {
+    const localIndex = path.join(process.cwd(), 'client', 'dist', 'index.html');
+    if (fs.existsSync(localIndex)) {
+      res.sendFile(localIndex);
+    } else {
+      res.status(404).send('Application files not found. Please build the client project.');
+    }
+  }
 });
 
 // Socket.IO middleware and handlers

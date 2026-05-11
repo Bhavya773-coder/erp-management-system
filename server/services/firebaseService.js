@@ -11,13 +11,24 @@ let firebaseApp = null;
 
 if (process.env.FIREBASE_SERVICE_ACCOUNT) {
   try {
-    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    let serviceAccountStr = process.env.FIREBASE_SERVICE_ACCOUNT;
+    
+    // Handle cases where the string might be wrapped in quotes or have literal \n
+    // but JSON.parse should handle standard JSON.
+    const serviceAccount = JSON.parse(serviceAccountStr);
+    
+    // Fix private key formatting if it was passed with literal \n strings
+    if (serviceAccount.private_key && typeof serviceAccount.private_key === 'string') {
+      serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+    }
+
     firebaseApp = admin.initializeApp({
       credential: admin.credential.cert(serviceAccount)
     });
     console.log('✅ Firebase Admin SDK initialized via environment variable');
   } catch (error) {
     console.error('❌ Failed to initialize Firebase from environment variable:', error.message);
+    console.log('   - Hint: Ensure the FIREBASE_SERVICE_ACCOUNT value is a valid JSON string.');
   }
 } else if (fs.existsSync(serviceAccountPath)) {
   try {
