@@ -103,8 +103,11 @@ const s = StyleSheet.create({
   msgText: { fontSize: Fonts.sizes.md, lineHeight: 20 },
   imageBox: { borderRadius: BorderRadius.md, overflow: 'hidden' },
   messageImage: { width: width * 0.6, height: width * 0.6, borderRadius: BorderRadius.sm },
-  fileBox: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: Spacing.sm, backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: BorderRadius.sm },
-  fileName: { fontSize: Fonts.sizes.sm, flex: 1 },
+  fileBox: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 8, borderRadius: 10, minWidth: 220, marginBottom: 4 },
+  fileIconWrapper: { width: 44, height: 44, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  fileInfo: { flex: 1 },
+  fileName: { fontSize: 14, fontWeight: '700' },
+  fileSize: { fontSize: 11, marginTop: 2 },
   meta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 4 },
   time: { fontSize: Fonts.sizes.xs },
   tick: { marginLeft: 4 },
@@ -256,13 +259,24 @@ const MessageItem = memo(({ msg, myId, currentChat, isMe, Colors, isSelected, is
             {msg.content && <Text style={[s.msgText, { color: Colors.textPrimary, marginTop: 4 }]}>{msg.content}</Text>}
           </View>
         ) : msg.messageType === 'FILE' ? (
-          <View style={s.fileBox}>
-            <Ionicons name="document" size={24} color={Colors.accent} />
-            <Text style={[s.fileName, { color: Colors.textPrimary }]} numberOfLines={1} ellipsizeMode="middle">{msg.fileName || msg.fileUrl?.split('/').pop() || 'File'}</Text>
-            <TouchableOpacity onPress={() => onDownload(msg)} style={{ padding: 4 }}>
-              <Ionicons name="download-outline" size={20} color={Colors.accent} />
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity 
+            activeOpacity={0.7} 
+            onPress={() => onDownload(msg)}
+            style={[s.fileBox, { backgroundColor: isMe ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}
+          >
+            <View style={[s.fileIconWrapper, { backgroundColor: Colors.accent }]}>
+              <Ionicons name="document-text" size={24} color="#FFF" />
+            </View>
+            <View style={s.fileInfo}>
+              <Text style={[s.fileName, { color: Colors.textPrimary }]} numberOfLines={1} ellipsizeMode="middle">
+                {msg.fileName || msg.fileUrl?.split('/').pop() || 'File'}
+              </Text>
+              <Text style={[s.fileSize, { color: Colors.textSecondary }]}>
+                {msg.fileSize ? `${(msg.fileSize / 1024).toFixed(1)} KB` : 'Document'}
+              </Text>
+            </View>
+            <Ionicons name="download-outline" size={20} color={Colors.textSecondary} />
+          </TouchableOpacity>
         ) : msg.messageType === 'TASK' ? (
           <View style={[s.voucherBox, { backgroundColor: Colors.bgSecondary }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
@@ -540,19 +554,32 @@ export default function ChatScreen() {
     const fileUri = `${FileSystem.documentDirectory}${filename}`;
     
     try {
-      setSending(true);
+      setSending(true); // This shows a loader on the UI
       const info = await FileSystem.getInfoAsync(fileUri);
+      
       if (info.exists) {
-        if (await Sharing.isAvailableAsync()) { await Sharing.shareAsync(fileUri); }
-        else { Alert.alert('Info', 'File already exists'); }
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(fileUri, { UTI: 'public.item', mimeType: msg.mimeType });
+        } else {
+          Alert.alert('Info', 'File already exists');
+        }
         return;
       }
+
       const downloadRes = await FileSystem.downloadAsync(url, fileUri);
-      if (await Sharing.isAvailableAsync()) { await Sharing.shareAsync(downloadRes.uri); }
-      else { Alert.alert('Success', 'File downloaded'); }
+      
+      // After download, auto-open it
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(downloadRes.uri, { UTI: 'public.item', mimeType: msg.mimeType });
+      } else {
+        Alert.alert('Success', 'File downloaded');
+      }
     } catch (err) {
-      Alert.alert('Error', 'Failed to download file');
-    } finally { setSending(false); }
+      console.error('Download error:', err);
+      Alert.alert('Error', 'Unable to download or open file');
+    } finally {
+      setSending(false);
+    }
   };
 
   const handleShareImage = async (url) => {

@@ -32,10 +32,11 @@ const s = StyleSheet.create({
   list: { paddingBottom: Spacing.xl },
   mediaItem: { width: GRID_SIZE, height: GRID_SIZE, margin: 1 },
   mediaImage: { width: '100%', height: '100%' },
-  docItem: { flexDirection: 'row', alignItems: 'center', padding: Spacing.md, borderRadius: BorderRadius.md, marginHorizontal: Spacing.md, marginVertical: 4 },
-  docInfo: { marginLeft: Spacing.md, flex: 1 },
-  docName: { fontSize: Fonts.sizes.md, fontWeight: '600' },
-  docMeta: { fontSize: Fonts.sizes.xs, marginTop: 2 },
+  docItem: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 12, marginHorizontal: Spacing.md, marginVertical: 6 },
+  fileIconWrapper: { width: 48, height: 48, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  docInfo: { marginLeft: 12, flex: 1 },
+  docName: { fontSize: 15, fontWeight: '700' },
+  docMeta: { fontSize: 12, marginTop: 4 },
   searchBar: { flexDirection: 'row', alignItems: 'center', margin: Spacing.md, paddingHorizontal: Spacing.md, height: 44, borderRadius: BorderRadius.md },
   searchInput: { flex: 1, marginLeft: Spacing.sm, fontSize: Fonts.sizes.md },
   searchResult: { padding: Spacing.md, borderBottomWidth: 0.5, marginHorizontal: Spacing.md },
@@ -179,12 +180,24 @@ export default function ChatInfoScreen() {
     }
     if (activeTab === 'DOCS') {
       return (
-        <TouchableOpacity style={[s.docItem, { backgroundColor: Colors.bgSecondary }]}>
-          <Ionicons name="document-text" size={24} color={Colors.accent} />
-          <View style={s.docInfo}>
-            <Text style={[s.docName, { color: Colors.textPrimary }]} numberOfLines={1}>{item.fileName}</Text>
-            <Text style={[s.docMeta, { color: Colors.textSecondary }]}>{item.fileSize ? `${(item.fileSize / 1024).toFixed(1)} KB` : ''} • {format(new Date(item.createdAt), 'MMM d')}</Text>
+        <TouchableOpacity 
+          style={[s.docItem, { backgroundColor: Colors.bgSecondary }]} 
+          onPress={() => {
+            // We can reuse the download logic or just open if cached
+            // For now, let's just use the same logic as the chat bubble
+            router.push({ pathname: `/chat/${chatId}`, params: { msgId: item.id || item._id } });
+          }}
+        >
+          <View style={[s.fileIconWrapper, { backgroundColor: Colors.accent }]}>
+            <Ionicons name="document-text" size={24} color="#FFF" />
           </View>
+          <View style={s.docInfo}>
+            <Text style={[s.docName, { color: Colors.textPrimary }]} numberOfLines={1}>{item.fileName || item.fileUrl?.split('/').pop()}</Text>
+            <Text style={[s.docMeta, { color: Colors.textSecondary }]}>
+              {item.fileSize ? `${(item.fileSize / 1024).toFixed(1)} KB` : ''} • {format(new Date(item.createdAt), 'MMM d')}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={Colors.textMuted} />
         </TouchableOpacity>
       );
     }
