@@ -173,9 +173,13 @@ export default function RootLayout() {
 
 // ─── Push Token Registration ─────────────────────────────────────────────
 async function registerForPushNotifications() {
-  if (!Notifications) return;
+  if (!Notifications) {
+    console.warn('⚠️ Notifications module not loaded');
+    return;
+  }
   
   try {
+    console.log('🔄 Starting notification registration...');
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
 
@@ -200,30 +204,33 @@ async function registerForPushNotifications() {
       });
     }
 
-    // Get the token specifically for this standalone app
-    const projectId = Constants?.expoConfig?.extra?.eas?.projectId;
-    const tokenData = await Notifications.getExpoPushTokenAsync({
-      ...(projectId ? { projectId } : {}),
-    });
+    // 1. Get Expo Push Token
+    try {
+      const projectId = Constants?.expoConfig?.extra?.eas?.projectId || Constants?.easConfig?.projectId;
+      const tokenData = await Notifications.getExpoPushTokenAsync({
+        ...(projectId ? { projectId } : {}),
+      });
+      const expoToken = tokenData.data;
+      console.log('🚀 Expo Token:', expoToken);
+      await authAPI.registerExpoPushToken(expoToken);
+    } catch (expoError) {
+      console.warn('⚠️ Expo token failed:', expoError.message);
+    }
 
-    const token = tokenData.data;
-    console.log('🚀 Standalone Expo Token:', token);
-
-    // Register Expo token with server
-    await authAPI.registerExpoPushToken(token);
-    
-    // ALSO get the native device token (FCM for Android, APNs for iOS)
-    // This is what Firebase Admin SDK uses directly
+    // 2. Get Native Device Token (FCM for Android)
     try {
       const deviceTokenData = await Notifications.getDevicePushTokenAsync();
       const deviceToken = deviceTokenData.data;
       console.log('🔥 Native Device Token:', deviceToken);
+      
+      // Send to server
       await authAPI.registerFCMToken(deviceToken);
+      console.log('✅ FCM token registered with server');
     } catch (fcmError) {
-      console.warn('⚠️ Native token registration failed:', fcmError);
+      console.warn('⚠️ Native token registration failed:', fcmError.message);
     }
 
-    console.log('✅ Registered successfully with server');
+    console.log('✨ Notification setup completed');
   } catch (error) {
     console.error('❌ Notification registration failed:', error);
   }

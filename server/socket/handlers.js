@@ -226,11 +226,16 @@ export const setupSocketHandlers = (io) => {
               const fcmTokens = member.user.fcmTokens;
               const expoPushTokens = member.user.expoPushTokens;
 
+              console.log(`🔍 Checking tokens for user ${userId}:`, { 
+                hasFCM: !!(fcmTokens && fcmTokens.length), 
+                hasExpo: !!(expoPushTokens && expoPushTokens.length) 
+              });
+
               // --- Direct FCM (Firebase Admin SDK) ---
-              // This is the "Native" notification the user wants
               if (fcmTokens && fcmTokens.length > 0) {
                 const chatName = updatedChat.isGroup ? updatedChat.name : formattedMessage.sender.name;
                 getUserTotalUnreadCount(userId).then(totalUnread => {
+                  console.log(`🚀 Dispatching FCM notification to ${userId} (${fcmTokens.length} tokens)`);
                   sendFCMNotifications(fcmTokens, {
                     title: chatName,
                     body: pushBody,
@@ -240,6 +245,7 @@ export const setupSocketHandlers = (io) => {
                 });
               } else if (expoPushTokens && expoPushTokens.length > 0) {
                 // --- Expo Push (Fallback) ---
+                console.log(`🚀 Dispatching Expo notification to ${userId} (${expoPushTokens.length} tokens)`);
                 const chatName = updatedChat.isGroup ? updatedChat.name : formattedMessage.sender.name;
                 const subtitle = updatedChat.isGroup ? formattedMessage.sender.name : undefined;
                 getUserTotalUnreadCount(userId).then(totalUnread => {
@@ -258,6 +264,8 @@ export const setupSocketHandlers = (io) => {
                     }
                   });
                 });
+              } else {
+                console.log(`⚠️ No push tokens found for user ${userId}`);
               }
           }
         });
