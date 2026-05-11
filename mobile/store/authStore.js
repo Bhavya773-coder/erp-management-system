@@ -21,7 +21,7 @@ export const useAuthStore = create((set, get) => ({
       set({ user, token, isAuthenticated: true, isLoading: false });
       return { success: true };
     } catch (error) {
-      let message = error.response?.data?.message || 'Login failed';
+      let message = error.response?.data?.message || error.message || 'Login failed';
       if (error.response?.data?.errors) {
         message = error.response.data.errors.map((err) => err.msg).join(', ');
       }
@@ -42,7 +42,7 @@ export const useAuthStore = create((set, get) => ({
       set({ user, token, isAuthenticated: true, isLoading: false });
       return { success: true };
     } catch (error) {
-      let message = error.response?.data?.message || 'Signup failed';
+      let message = error.response?.data?.message || error.message || 'Signup failed';
       if (error.response?.data?.errors) {
         message = error.response.data.errors.map((err) => err.msg).join(', ');
       }
