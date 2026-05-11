@@ -37,6 +37,12 @@ const getMediaUrl = (url) => {
   return `${API_BASE_URL}/${url.replace(/^\//, '')}`;
 };
 
+const getAvatarUrl = (currentChat, otherUser) => {
+  return currentChat?.isGroup 
+    ? (currentChat?.avatarUrl ? getMediaUrl(currentChat.avatarUrl) : null) 
+    : (otherUser?.avatarUrl ? getMediaUrl(otherUser.avatarUrl) : null);
+};
+
 const LiveTimer = ({ endTime, completedAt, status }) => {
   const [timeLeft, setTimeLeft] = useState('');
 
@@ -682,9 +688,15 @@ export default function ChatScreen() {
                 {currentChat?.isGroup ? (
                   currentChat?.avatarUrl ? <Image source={{ uri: getMediaUrl(currentChat.avatarUrl) }} style={{ width: '100%', height: '100%', borderRadius: 20 }} /> : <Ionicons name="people" size={20} color={Colors.textOnPrimary} />
                 ) : (
-                  (currentChat?.members?.find(m => m.user?.id !== myId)?.user?.avatarUrl) ? 
-                    <Image source={{ uri: getMediaUrl(currentChat.members.find(m => m.user?.id !== myId).user.avatarUrl) }} style={{ width: '100%', height: '100%', borderRadius: 20 }} /> : 
-                    <Text style={{ color: Colors.textOnPrimary }}>{currentChat?.name?.[0]}</Text>
+                  (() => {
+                    const otherM = currentChat?.members?.find(m => (m.user?.id || m.user?._id) !== myId);
+                    const av = otherM?.user?.avatarUrl;
+                    return av ? (
+                      <Image source={{ uri: getMediaUrl(av) }} style={{ width: '100%', height: '100%', borderRadius: 20 }} />
+                    ) : (
+                      <Text style={{ color: Colors.textOnPrimary }}>{currentChat?.name?.[0]}</Text>
+                    );
+                  })()
                 )}
               </View>
               <View style={s.headerInfo}>

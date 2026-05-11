@@ -74,7 +74,9 @@ export default function ChatInfoScreen() {
   }, [currentChat, user]);
 
   const chatName = currentChat?.isGroup ? currentChat.name : (otherUser?.name || 'Chat Info');
-  const avatarUrl = currentChat?.isGroup ? currentChat?.avatarUrl : (otherUser?.avatarUrl?.startsWith('http') ? otherUser.avatarUrl : (otherUser?.avatarUrl ? `${API_BASE_URL}${otherUser.avatarUrl}` : null));
+  const avatarUrl = currentChat?.isGroup 
+    ? (currentChat?.avatarUrl ? (currentChat.avatarUrl.startsWith('http') ? currentChat.avatarUrl : `${API_BASE_URL}/${currentChat.avatarUrl.replace(/^\//, '')}`) : null) 
+    : (otherUser?.avatarUrl ? (otherUser.avatarUrl.startsWith('http') ? otherUser.avatarUrl : `${API_BASE_URL}/${otherUser.avatarUrl.replace(/^\//, '')}`) : null);
 
   useEffect(() => {
     const backAction = () => {
@@ -122,7 +124,7 @@ export default function ChatInfoScreen() {
   const chatImages = useMemo(() => {
     return media.map(m => ({
       id: m.id || m._id,
-      url: m.fileUrl?.startsWith('http') ? m.fileUrl : `${API_BASE_URL}${m.fileUrl}`,
+      url: m.fileUrl?.startsWith('http') ? m.fileUrl : `${API_BASE_URL}/${m.fileUrl.replace(/^\//, '')}`,
       sender: m.sender?.name,
       time: m.createdAt
     }));
@@ -168,7 +170,7 @@ export default function ChatInfoScreen() {
   const renderItem = ({ item, index }) => {
     const itemId = item.id || item._id;
     if (activeTab === 'MEDIA') {
-      const fullUrl = item.fileUrl?.startsWith('http') ? item.fileUrl : `${API_BASE_URL}${item.fileUrl}`;
+      const fullUrl = item.fileUrl?.startsWith('http') ? item.fileUrl : `${API_BASE_URL}/${item.fileUrl.replace(/^\//, '')}`;
       return (
         <TouchableOpacity style={s.mediaItem} onPress={() => openViewer(index)}>
           <Image source={{ uri: fullUrl }} style={s.mediaImage} resizeMode="cover" />
