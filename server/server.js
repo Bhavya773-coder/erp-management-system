@@ -69,28 +69,19 @@ app.use((req, res, next) => {
 app.use('/uploads', express.static('uploads'));
 
 // Serve static files from the React app
-const distPath = path.resolve(__dirname, '..', 'client', 'dist');
+const distPath = path.resolve(process.cwd(), 'client', 'dist');
 const indexFile = path.join(distPath, 'index.html');
 
-console.log(`📂 Environment Info:`);
-console.log(`   - __dirname: ${__dirname}`);
-console.log(`   - process.cwd(): ${process.cwd()}`);
-console.log(`   - distPath: ${distPath}`);
-console.log(`   - indexFile: ${indexFile}`);
+console.log(`📂 Path Diagnostic:`);
+console.log(`   - Current Directory (cwd): ${process.cwd()}`);
+console.log(`   - Directory Name (__dirname): ${__dirname}`);
+console.log(`   - Resolved Dist Path: ${distPath}`);
 
 if (fs.existsSync(distPath)) {
-  console.log(`✅ Static directory found at ${distPath}`);
-  const indexExists = fs.existsSync(indexFile);
-  console.log(`${indexExists ? '✅' : '❌'} index.html ${indexExists ? 'exists' : 'NOT found'} at ${indexFile}`);
+  console.log(`✅ Web client found at ${distPath}. Serving static files.`);
   app.use(express.static(distPath));
 } else {
-  console.error(`❌ ERROR: Static directory not found at ${distPath}`);
-  // Fallback for local dev
-  const localDist = path.join(process.cwd(), 'client', 'dist');
-  if (fs.existsSync(localDist)) {
-     console.log(`✅ Found fallback dist at ${localDist}`);
-     app.use(express.static(localDist));
-  }
+  console.log(`ℹ️ Web client not found at ${distPath}. Server will operate in API-only mode.`);
 }
 
 // API Routes
@@ -103,26 +94,49 @@ app.use('/api/fleet', fleetRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+  res.json({ 
+    status: 'OK', 
+    service: 'Arcadian ERP API',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'production'
+  });
 });
 
 // The "catchall" handler
 app.get('*', (req, res) => {
+  // If it's an API route that wasn't caught, return 404
   if (req.path.startsWith('/api')) {
     return res.status(404).json({ success: false, message: 'API route not found' });
   }
   
-  // Try to send index.html from distPath first, then local fallback
+  // Try to serve React app if it exists
   if (fs.existsSync(indexFile)) {
-    res.sendFile(indexFile);
-  } else {
-    const localIndex = path.join(process.cwd(), 'client', 'dist', 'index.html');
-    if (fs.existsSync(localIndex)) {
-      res.sendFile(localIndex);
-    } else {
-      res.status(404).send('Application files not found. Please build the client project.');
-    }
+    return res.sendFile(indexFile);
   }
+  
+  // Fallback: Show a friendly API status page
+  res.send(`
+    <html>
+      <head>
+        <title>Arcadian ERP API</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #0f172a; color: #f8fafc; text-align: center; }
+          .container { padding: 2rem; border-radius: 1rem; background: #1e293b; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+          h1 { color: #22c55e; margin-bottom: 0.5rem; }
+          p { color: #94a3b8; }
+          .status { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 1rem; background: #064e3b; color: #4ade80; font-size: 0.875rem; font-weight: 600; margin-top: 1rem; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h1>🚀 Arcadian API is Live</h1>
+          <p>The backend server is running successfully.</p>
+          <div class="status">● System Operational</div>
+          <p style="margin-top: 2rem; font-size: 0.75rem;">(Note: Web Client not deployed in this instance)</p>
+        </div>
+      </body>
+    </html>
+  `);
 });
 
 // Socket.IO middleware and handlers
