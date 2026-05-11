@@ -10,6 +10,8 @@ import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { useChatStore } from '../../store/chatStore';
 import { useAuthStore } from '../../store/authStore';
 import { useSocket } from '../../hooks/useSocket';
@@ -31,13 +33,8 @@ const formatTime = (timeStr) => {
 
 const getMediaUrl = (url) => {
   if (!url) return '';
-  if (!url.startsWith('http')) return `${API_BASE_URL}${url}`;
-  const oldIps = ['http://192.168.16.127:5000', 'http://127.0.0.1:5000', 'http://localhost:5000'];
-  let sanitizedUrl = url;
-  oldIps.forEach(ip => {
-    if (sanitizedUrl.startsWith(ip)) sanitizedUrl = sanitizedUrl.replace(ip, API_BASE_URL);
-  });
-  return sanitizedUrl;
+  if (url.startsWith('http')) return url;
+  return `${API_BASE_URL}/${url.replace(/^\//, '')}`;
 };
 
 const LiveTimer = ({ endTime, completedAt, status }) => {
@@ -139,20 +136,41 @@ const s = StyleSheet.create({
   viewerImage: { width: '100%', height: '100%' }
 });
 
-const MessageItem = memo(({ msg, myId, currentChat, isMe, Colors, isSelected, onLongPress, onPress, onImagePress, onVoucherAction, onTaskAction }) => {
+const MessageItem = memo(({ msg, myId, currentChat, isMe, Colors, isSelected, isSelectionMode, onLongPress, onPress, onImagePress, onVoucherAction, onTaskAction, onDownload }) => {
   const showSender = currentChat?.isGroup && !isMe;
   const time = msg.createdAt ? format(new Date(msg.createdAt), 'HH:mm') : '';
 
-  const tick = isMe ? (msg.status === 'SEEN' ? { name: 'checkmark-done', color: Colors.seen } : { name: 'checkmark', color: Colors.sent }) : null;
+  const getTick = () => {
+    if (!isMe) return null;
+    switch (msg.status) {
+      case 'SEEN': return { name: 'checkmark-done', color: Colors.seen };
+      case 'DELIVERED': return { name: 'checkmark-done', color: Colors.sent };
+      default: return { name: 'checkmark', color: Colors.sent };
+    }
+  };
+  const tick = getTick();
 
   return (
     <TouchableOpacity
-      style={[s.bubbleWrapper, isSelected && { backgroundColor: 'rgba(33, 150, 243, 0.15)' }]}
+      style={[
+        s.bubbleWrapper, 
+        isSelected && { backgroundColor: 'rgba(33, 150, 243, 0.15)' },
+        isSelectionMode && { flexDirection: 'row', alignItems: 'center' }
+      ]}
       onLongPress={() => onLongPress(msg)}
-      onPress={() => (msg.messageType === 'IMAGE' ? onImagePress(msg) : onPress(msg))}
+      onPress={() => (isSelectionMode ? onPress(msg) : (msg.messageType === 'IMAGE' ? onImagePress(msg) : onPress(msg)))}
       activeOpacity={0.8}
       delayLongPress={400}
     >
+      {isSelectionMode && (
+        <View style={{ marginRight: 12, marginLeft: 4 }}>
+          <Ionicons 
+            name={isSelected ? "checkbox" : "square-outline"} 
+            size={24} 
+            color={isSelected ? Colors.accent : Colors.textMuted} 
+          />
+        </View>
+      )}
       <View style={[
         s.bubble, 
         isMe ? { backgroundColor: Colors.bgBubbleOutgoing, alignSelf: 'flex-end', borderBottomRightRadius: 4 } : { backgroundColor: Colors.bgBubbleIncoming, alignSelf: 'flex-start', borderBottomLeftRadius: 4 },
@@ -232,7 +250,13 @@ const MessageItem = memo(({ msg, myId, currentChat, isMe, Colors, isSelected, on
             {msg.content && <Text style={[s.msgText, { color: Colors.textPrimary, marginTop: 4 }]}>{msg.content}</Text>}
           </View>
         ) : msg.messageType === 'FILE' ? (
-          <View style={s.fileBox}><Ionicons name="document" size={24} color={Colors.accent} /><Text style={[s.fileName, { color: Colors.textPrimary }]} numberOfLines={1}>{msg.fileName}</Text></View>
+          <View style={s.fileBox}>
+            <Ionicons name="document" size={24} color={Colors.accent} />
+            <Text style={[s.fileName, { color: Colors.textPrimary }]} numberOfLines={1} ellipsizeMode="middle">{msg.fileName || msg.fileUrl?.split('/').pop() || 'File'}</Text>
+            <TouchableOpacity onPress={() => onDownload(msg)} style={{ padding: 4 }}>
+              <Ionicons name="download-outline" size={20} color={Colors.accent} />
+            </TouchableOpacity>
+          </View>
         ) : msg.messageType === 'TASK' ? (
           <View style={[s.voucherBox, { backgroundColor: Colors.bgSecondary }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
@@ -264,6 +288,7 @@ const MessageItem = memo(({ msg, myId, currentChat, isMe, Colors, isSelected, on
   );
 }, (prev, next) => {
   return prev.isSelected === next.isSelected && 
+         prev.isSelectionMode === next.isSelectionMode &&
          prev.msg.status === next.msg.status && 
          prev.msg.voucherData?.status === next.msg.voucherData?.status &&
          prev.msg.taskData?.status === next.msg.taskData?.status &&
@@ -281,7 +306,6 @@ export default function ChatScreen() {
   const { socket, joinChat, leaveChat, sendMessage, startTyping, stopTyping, markMessagesSeen, deleteMessageSocket, sendVoucherAction, onTaskAction } = useSocket(token);
 
   const [text, setText] = useState('');
-  const isAndroid = Platform.OS === 'android';
   const [sending, setSending] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [showAttachments, setShowAttachments] = useState(false);
@@ -340,7 +364,6 @@ export default function ChatScreen() {
     };
   }, [chatId]);
 
-  // Task Alarm Logic
   useEffect(() => {
     let timers = [];
     messages.forEach(m => {
@@ -348,7 +371,7 @@ export default function ChatScreen() {
         const timeDiff = new Date(m.taskData.endTime).getTime() - Date.now();
         if (timeDiff <= 0 && !ringingTask) {
           triggerAlarm(m);
-        } else if (timeDiff > 0 && timeDiff < 86400000) { // only schedule if within a day to avoid memory bloat
+        } else if (timeDiff > 0 && timeDiff < 86400000) {
           const t = setTimeout(() => triggerAlarm(m), timeDiff);
           timers.push(t);
         }
@@ -361,18 +384,16 @@ export default function ChatScreen() {
     if (ringingTask) return;
     setRingingTask(taskMsg);
     try {
-      // Loop vibration for continuous buzz using expo-haptics
       vibrationIntervalRef.current = setInterval(() => {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }, 1500);
-      // Play sound
       const { sound } = await Audio.Sound.createAsync(
-        require('../../assets/images/favicon.png'), // fallback to no crash if no audio file exists, expo-av will just fail gracefully
+        require('../../assets/images/favicon.png'),
         { shouldPlay: true, isLooping: true }
       );
       soundRef.current = sound;
     } catch (err) {
-      console.log('Audio init skipped or failed (safe fallback to vibration only):', err.message);
+      console.log('Audio init skipped or failed:', err.message);
     }
   };
 
@@ -392,9 +413,6 @@ export default function ChatScreen() {
     setRingingTask(null);
   };
 
-  // removed local onTaskAction
-
-
   useEffect(() => {
     const backAction = () => {
       if (selectedIds.length > 0) {
@@ -404,11 +422,17 @@ export default function ChatScreen() {
       if (viewerVisible) { setViewerVisible(false); return true; }
       if (voucherVisible) { setVoucherVisible(false); return true; }
       if (voucherDetailVisible) { setVoucherDetailVisible(false); return true; }
-      return false;
+      if (taskDetailVisible) { setTaskDetailVisible(false); return true; }
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/(tabs)/chats');
+      }
+      return true;
     };
     const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
     return () => backHandler.remove();
-  }, [selectedIds, viewerVisible, voucherVisible, voucherDetailVisible]);
+  }, [selectedIds, viewerVisible, voucherVisible, voucherDetailVisible, taskDetailVisible]);
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -417,7 +441,6 @@ export default function ChatScreen() {
         skipScroll.current = false;
         return;
       }
-      // Only scroll to end if the last message is from me or we are already near the bottom
       const lastMsg = messages[messages.length - 1];
       if (lastMsg.senderId === myId || lastMsg.sender?.id === myId) {
         setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
@@ -425,7 +448,6 @@ export default function ChatScreen() {
     }
   }, [messages.length]);
 
-  // Track keyboard for bottom padding (no LayoutAnimation, no flicker)
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
@@ -464,7 +486,6 @@ export default function ChatScreen() {
       setSending(true);
       try {
         if (res.assets.length >= 4) {
-          // Grouped upload
           let uploadedUrls = [];
           for (const asset of res.assets) {
             const up = await fileAPI.uploadFile(asset.uri, asset.fileName || 'photo.jpg', asset.mimeType || 'image/jpeg');
@@ -472,7 +493,6 @@ export default function ChatScreen() {
           }
           handleSend(null, 'IMAGE', { fileUrl: uploadedUrls.join(',') });
         } else {
-          // Individual upload
           for (const asset of res.assets) {
             const up = await fileAPI.uploadFile(asset.uri, asset.fileName || 'photo.jpg', asset.mimeType || 'image/jpeg');
             handleSend(null, 'IMAGE', up.data.data);
@@ -493,7 +513,6 @@ export default function ChatScreen() {
     try {
       const MediaLibrary = require('expo-media-library');
       const FileSystem = require('expo-file-system');
-      
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert('Permission Denied', 'Gallery access is required to save images.');
@@ -504,42 +523,39 @@ export default function ChatScreen() {
       await MediaLibrary.saveToLibraryAsync(res.uri);
       Alert.alert('Success', 'Image saved to gallery');
     } catch (err) {
-      console.log('MediaLibrary not available or error:', err.message);
-      Alert.alert('Rebuild Required', 'The "Download" feature requires a native rebuild. Use the "Share" option instead for now.');
+      Alert.alert('Error', 'Unable to save image');
     }
+  };
+
+  const handleDownloadFile = async (msg) => {
+    if (!msg.fileUrl) return;
+    const url = getMediaUrl(msg.fileUrl);
+    const filename = msg.fileName || url.split('/').pop();
+    const fileUri = `${FileSystem.documentDirectory}${filename}`;
+    
+    try {
+      setSending(true);
+      const info = await FileSystem.getInfoAsync(fileUri);
+      if (info.exists) {
+        if (await Sharing.isAvailableAsync()) { await Sharing.shareAsync(fileUri); }
+        else { Alert.alert('Info', 'File already exists'); }
+        return;
+      }
+      const downloadRes = await FileSystem.downloadAsync(url, fileUri);
+      if (await Sharing.isAvailableAsync()) { await Sharing.shareAsync(downloadRes.uri); }
+      else { Alert.alert('Success', 'File downloaded'); }
+    } catch (err) {
+      Alert.alert('Error', 'Failed to download file');
+    } finally { setSending(false); }
   };
 
   const handleShareImage = async (url) => {
     try {
-      // Try using the built-in React Native Share first as it's most compatible
-      await Share.share({
-        url: url,
-        message: 'Check out this photo from Arcadian Chat',
-      });
+      await Share.share({ url: url, message: 'Check out this photo' });
     } catch (err) {
-      console.error('Share error:', err);
-      Alert.alert('Error', 'Failed to share image');
+      Alert.alert('Error', 'Failed to share');
     }
   };
-
-  const renderMessage = useCallback(({ item }) => {
-    const isMe = item.senderId === myId || item.sender?.id === myId;
-    return (
-      <MessageItem 
-        msg={item} 
-        myId={myId} 
-        isMe={isMe}
-        currentChat={currentChat} 
-        Colors={Colors} 
-        isSelected={selectedIds.includes(item.id || item.tempId)} 
-        onLongPress={handleLongPress} 
-        onPress={handlePress} 
-        onImagePress={handleImagePress} 
-        onVoucherAction={sendVoucherAction}
-        onTaskAction={onTaskAction}
-      />
-    );
-  }, [myId, currentChat, Colors, selectedIds, handleLongPress, handlePress, handleImagePress, sendVoucherAction, onTaskAction]);
 
   const handleLongPress = useCallback((m) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -573,8 +589,28 @@ export default function ChatScreen() {
     }
   }, [selectedIds, chatImages, handlePress]);
 
-  // The chat body content — FlatList + input bar
-  const chatBody = (
+  const renderMessage = useCallback(({ item }) => {
+    const isMe = (item.senderId || item.sender?.id) === myId;
+    return (
+      <MessageItem 
+        msg={item} 
+        myId={myId} 
+        isMe={isMe}
+        currentChat={currentChat} 
+        Colors={Colors} 
+        isSelected={selectedIds.includes(item.id || item.tempId)} 
+        isSelectionMode={selectedIds.length > 0}
+        onLongPress={handleLongPress} 
+        onPress={handlePress} 
+        onImagePress={handleImagePress} 
+        onVoucherAction={sendVoucherAction}
+        onTaskAction={onTaskAction}
+        onDownload={handleDownloadFile}
+      />
+    );
+  }, [myId, currentChat, Colors, selectedIds, handleLongPress, handlePress, handleImagePress, sendVoucherAction, onTaskAction, handleDownloadFile]);
+
+  const chatBody = useMemo(() => (
     <>
       <FlatList 
         ref={flatListRef} 
@@ -588,7 +624,7 @@ export default function ChatScreen() {
         maxToRenderPerBatch={10}
         windowSize={10}
         removeClippedSubviews={Platform.OS === 'android'}
-        ListHeaderComponent={hasMore ? <TouchableOpacity onPress={() => { skipScroll.current = true; loadMoreMessages(chatId); }}><Text style={{ textAlign: 'center', color: Colors.accent, padding: 10 }}>Load earlier</Text></TouchableOpacity> : null} 
+        ListHeaderComponent={hasMore ? <TouchableOpacity onPress={() => { skipScroll.current = true; loadMoreMessages(chatId); }}><View style={s.loadMore}><Text style={[s.loadMoreText, { color: Colors.accent }]}>Load earlier</Text></View></TouchableOpacity> : null} 
       />
       
       {showAttachments && (
@@ -601,7 +637,7 @@ export default function ChatScreen() {
         </View>
       )}
       
-      <View style={[s.inputContainer, { paddingBottom: Platform.OS === 'android' ? Math.max(insets.bottom, 8) + kbHeight : Math.max(insets.bottom, 8) }]}>
+      <View style={[s.inputContainer, { paddingBottom: Math.max(insets.bottom, 8) + (Platform.OS === 'android' ? kbHeight : 0) }]}>
         <View style={s.inputBubble}>
           <TouchableOpacity onPress={() => setShowAttachments(!showAttachments)} style={s.attachBtn}>
             <Ionicons name={showAttachments ? "close" : "add"} size={26} color={Colors.textMuted} />
@@ -619,14 +655,14 @@ export default function ChatScreen() {
 
         <TouchableOpacity 
           onPress={() => handleSend()} 
-          disabled={!text.trim()}
+          disabled={!text.trim() && !sending}
           style={[s.sendBtn, { backgroundColor: text.trim() ? Colors.accent : Colors.textMuted }]}
         >
-          <Ionicons name="send" size={22} color="#FFF" />
+          {sending ? <ActivityIndicator color="#FFF" size="small" /> : <Ionicons name="send" size={22} color="#FFF" />}
         </TouchableOpacity>
       </View>
     </>
-  );
+  ), [messages, renderMessage, showAttachments, text, Colors, insets, kbHeight, sending]);
 
   return (
     <View style={[s.container, { backgroundColor: Colors.bgChat, paddingTop: insets.top }]}>
@@ -643,11 +679,20 @@ export default function ChatScreen() {
             <TouchableOpacity onPress={() => router.back()} style={s.backBtn}><Ionicons name="arrow-back" size={24} color={Colors.textPrimary} /></TouchableOpacity>
             <TouchableOpacity style={s.headerContent} onPress={() => router.push(`/chat/info/${chatId}`)}>
               <View style={[s.headerAvatar, { backgroundColor: Colors.primaryLight }]}>
-                <Text style={{ color: Colors.textOnPrimary }}>{currentChat?.name?.[0]}</Text>
+                {currentChat?.isGroup ? (
+                  currentChat?.avatarUrl ? <Image source={{ uri: getMediaUrl(currentChat.avatarUrl) }} style={{ width: '100%', height: '100%', borderRadius: 20 }} /> : <Ionicons name="people" size={20} color={Colors.textOnPrimary} />
+                ) : (
+                  (currentChat?.members?.find(m => m.user?.id !== myId)?.user?.avatarUrl) ? 
+                    <Image source={{ uri: getMediaUrl(currentChat.members.find(m => m.user?.id !== myId).user.avatarUrl) }} style={{ width: '100%', height: '100%', borderRadius: 20 }} /> : 
+                    <Text style={{ color: Colors.textOnPrimary }}>{currentChat?.name?.[0]}</Text>
+                )}
               </View>
               <View style={s.headerInfo}>
                 <Text style={[s.headerName, { color: Colors.textPrimary }]} numberOfLines={1}>{currentChat?.name}</Text>
-                <Text style={[s.headerStatus, { color: Colors.textSecondary }]}>{typingUsers[chatId]?.length > 0 ? 'typing...' : (currentChat?.isOnline ? 'Online' : 'Offline')}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  {currentChat?.isOnline && <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#4CAF50', marginRight: 4 }} />}
+                  <Text style={[s.headerStatus, { color: Colors.textSecondary }]}>{typingUsers[chatId]?.length > 0 ? 'typing...' : (currentChat?.isOnline ? 'Online' : 'Offline')}</Text>
+                </View>
               </View>
             </TouchableOpacity>
           </>
@@ -739,7 +784,7 @@ export default function ChatScreen() {
         </View>
       )}
 
-      <Modal visible={viewerVisible} transparent animationType="fade">
+      <Modal visible={viewerVisible} transparent animationType="fade" onRequestClose={() => setViewerVisible(false)}>
         <SafeAreaView style={s.viewerContainer}>
           <View style={s.viewerHeader}>
             <TouchableOpacity onPress={() => setViewerVisible(false)} style={s.viewerClose}><Ionicons name="close" size={30} color="#FFF" /></TouchableOpacity>

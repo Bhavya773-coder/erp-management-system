@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Image,
-  TextInput, FlatList, ActivityIndicator, Dimensions, Modal
+  TextInput, FlatList, ActivityIndicator, Dimensions, Modal, BackHandler
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -74,7 +74,20 @@ export default function ChatInfoScreen() {
   }, [currentChat, user]);
 
   const chatName = currentChat?.isGroup ? currentChat.name : (otherUser?.name || 'Chat Info');
-  const avatarUrl = currentChat?.isGroup ? null : (otherUser?.avatar?.startsWith('http') ? otherUser.avatar : (otherUser?.avatar ? `${API_BASE_URL}${otherUser.avatar}` : null));
+  const avatarUrl = currentChat?.isGroup ? currentChat?.avatarUrl : (otherUser?.avatarUrl?.startsWith('http') ? otherUser.avatarUrl : (otherUser?.avatarUrl ? `${API_BASE_URL}${otherUser.avatarUrl}` : null));
+
+  useEffect(() => {
+    const backAction = () => {
+      if (viewerVisible) {
+        setViewerVisible(false);
+        return true;
+      }
+      router.back();
+      return true;
+    };
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+    return () => backHandler.remove();
+  }, [viewerVisible]);
 
   useEffect(() => {
     loadContent();

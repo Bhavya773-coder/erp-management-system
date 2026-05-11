@@ -186,6 +186,19 @@ export const setupSocketHandlers = (io) => {
           
           // Send push notification to other users
           if (userId !== socket.userId) {
+            // Update message status to DELIVERED if user is connected
+            if (connectedUsers.has(userId)) {
+              Message.findByIdAndUpdate(message._id, { status: 'DELIVERED' }).exec().then(() => {
+                // Notify sender about delivery
+                io.to(`user:${socket.userId}`).emit('message:status_update', {
+                  chatId: formattedMessage.chatId,
+                  messageId: formattedMessage.id,
+                  status: 'DELIVERED'
+                });
+              });
+              formattedMessage.status = 'DELIVERED';
+            }
+
             // --- Web Push (browser) ---
             const pushSubscription = member.user.pushSubscription;
             

@@ -5,6 +5,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useChatStore } from '../store/chatStore';
 import { Colors, Fonts, Spacing, BorderRadius } from '@/constants/appTheme';
+import { Image } from 'react-native';
+import { API_BASE_URL } from '@/constants/config';
 
 export default function NewChatScreen() {
   const { users, fetchUsers } = useChatStore();
@@ -52,15 +54,24 @@ export default function NewChatScreen() {
       <FlatList
         data={filtered}
         keyExtractor={i => i.id}
-        renderItem={({ item }) => (
-          <TouchableOpacity style={s.userItem} onPress={() => handleSelect(item.id)} activeOpacity={0.7}>
-            <View style={s.avatar}><Text style={s.avatarText}>{getInitials(item.name)}</Text></View>
-            <View style={s.userInfo}>
-              <Text style={s.userName}>{item.name}</Text>
-              <Text style={s.userDetail}>{item.role}</Text>
-            </View>
-          </TouchableOpacity>
-        )}
+        renderItem={({ item }) => {
+          const avatarUrl = item.avatarUrl ? (item.avatarUrl.startsWith('http') ? item.avatarUrl : `${API_BASE_URL}/${item.avatarUrl.replace(/^\//, '')}`) : null;
+          return (
+            <TouchableOpacity style={s.userItem} onPress={() => handleSelect(item.id)} activeOpacity={0.7}>
+              <View style={[s.avatar, { overflow: 'hidden' }]}>
+                {avatarUrl ? (
+                  <Image source={{ uri: avatarUrl }} style={{ width: '100%', height: '100%' }} />
+                ) : (
+                  <Text style={s.avatarText}>{getInitials(item.name)}</Text>
+                )}
+              </View>
+              <View style={s.userInfo}>
+                <Text style={s.userName}>{item.name}</Text>
+                <Text style={s.userDetail}>{item.role}</Text>
+              </View>
+            </TouchableOpacity>
+          );
+        }}
         ListEmptyComponent={<View style={s.empty}><Text style={s.emptyText}>No contacts found</Text></View>}
       />
     </SafeAreaView>

@@ -26,6 +26,13 @@ dotenv.config();
 // Connect to MongoDB
 connectDB();
 
+// Ensure uploads directory exists
+const uploadsDir = path.join(process.cwd(), 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+  console.log('📁 Created uploads directory');
+}
+
 const app = express();
 const httpServer = createServer(app);
 const allowedOrigins = [
@@ -66,7 +73,7 @@ app.use((req, res, next) => {
 });
 
 // Static files for uploads
-app.use('/uploads', express.static('uploads'));
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // Serve static files from the React app
 const distPath = path.resolve(process.cwd(), 'client', 'dist');
