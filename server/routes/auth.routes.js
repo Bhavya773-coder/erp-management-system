@@ -31,7 +31,8 @@ router.post('/signup',
   ],
   async (req, res) => {
     try {
-      const { name, email, password, phone, aadhaarNumber, role, education, skills, aadhaarFrontImage, aadhaarBackImage } = req.body;
+      let { name, email, password, phone, aadhaarNumber, role, education, skills, aadhaarFrontImage, aadhaarBackImage } = req.body;
+      email = email.toLowerCase();
 
       // Check if user exists
       const query = [{ email }];
@@ -103,6 +104,16 @@ router.post('/signup',
       }
     } catch (error) {
       console.error('Signup error details:', error);
+      
+      // Handle MongoDB Duplicate Key Error (code 11000)
+      if (error.code === 11000) {
+        const field = Object.keys(error.keyPattern)[0];
+        const message = field === 'email' ? 'Email already registered' : 
+                        field === 'aadhaarNumber' ? 'Aadhaar number already registered' : 
+                        'Duplicate data error';
+        return res.status(400).json({ success: false, message });
+      }
+
       res.status(500).json({ 
         success: false, 
         message: 'Server error during registration',
@@ -123,7 +134,8 @@ router.post('/login',
   ],
   async (req, res) => {
     try {
-      const { email, password } = req.body;
+      let { email, password } = req.body;
+      email = email.toLowerCase();
 
       // Find user
       const user = await User.findOne({ email });
