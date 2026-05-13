@@ -60,6 +60,7 @@ export default function RootLayout() {
   const notificationListener = useRef(null);
   const responseListener = useRef(null);
   const appState = useRef(AppState.currentState);
+  const hasNavigatedFromNotification = useRef(false);
 
   // Socket connection
   const { socket } = useSocket(token);
@@ -78,37 +79,64 @@ export default function RootLayout() {
     }
   }, [isAuthenticated, token, notificationsEnabled]);
 
+  // Helper to navigate to chat only once per notification interaction
+  const navigateToChat = (chatId) => {
+    if (hasNavigatedFromNotification.current) return;
+    
+    // Check if we're already in that specific chat to avoid redundant pushes
+    const isAlreadyInTargetChat = segments[0] === 'chat' && segments[1] === chatId;
+    if (isAlreadyInTargetChat) {
+      console.log('✅ Already in target chat, skipping navigation');
+      return;
+    }
+
+    hasNavigatedFromNotification.current = true;
+    console.log('🚀 Navigating to chat from notification:', chatId);
+    
+    // Use replace if we're already in a chat to keep stack clean, otherwise push
+    const isInAnyChat = segments[0] === 'chat';
+    
+    setTimeout(() => {
+      if (isInAnyChat) {
+        router.replace(`/chat/${chatId}`);
+      } else {
+        router.push(`/chat/${chatId}`);
+      }
+      
+      // Reset the flag after navigation so future taps still work
+      setTimeout(() => { hasNavigatedFromNotification.current = false; }, 1000);
+    }, 100);
+  };
+
   // Notification listeners
   useEffect(() => {
     if (!Notifications) return;
 
-    // Foreground notification received
-    if (Notifications.addNotificationReceivedListener) {
-      notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
-        const data = notification?.request?.content?.data;
-        console.log('🔔 Notification received:', data);
-      });
-    }
-
-    // Notification tapped — deep link to chat
+    // Notification tapped — deep link to chat (handles both warm and cold start)
     if (Notifications.addNotificationResponseReceivedListener) {
       responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
         const data = response?.notification?.request?.content?.data;
-        console.log('👆 Notification tapped:', data);
+        console.log('👆 Notification tapped listener:', data);
         if (data?.chatId) {
-          setTimeout(() => router.push(`/chat/${data.chatId}`), 500);
+          navigateToChat(data.chatId);
         }
       });
     }
 
-    // Cold start — app opened from killed state via notification
-    if (Notifications.getLastNotificationResponseAsync) {
-      Notifications.getLastNotificationResponseAsync().then(response => {
+    // Optional: Only check getLastNotificationResponseAsync if no listener event happened yet
+    // This is safer for cold starts on some Android versions
+    const checkInitialNotification = async () => {
+      if (Notifications.getLastNotificationResponseAsync) {
+        const response = await Notifications.getLastNotificationResponseAsync();
         if (response?.notification?.request?.content?.data?.chatId) {
-          setTimeout(() => router.push(`/chat/${response.notification.request.content.data.chatId}`), 1000);
+          const data = response.notification.request.content.data;
+          console.log('❄️ Cold start notification found:', data.chatId);
+          navigateToChat(data.chatId);
         }
-      });
-    }
+      }
+    };
+    
+    checkInitialNotification();
 
     // Reset badge when app comes to foreground
     const subscription = AppState.addEventListener('change', nextAppState => {

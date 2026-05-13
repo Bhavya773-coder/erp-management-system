@@ -75,9 +75,10 @@ export default function ChatInfoScreen() {
   }, [currentChat, user]);
 
   const chatName = currentChat?.isGroup ? currentChat.name : (otherUser?.name || 'Chat Info');
-  const avatarUrl = currentChat?.isGroup 
-    ? (currentChat?.avatarUrl ? (currentChat.avatarUrl.startsWith('http') ? currentChat.avatarUrl : `${API_BASE_URL}/${currentChat.avatarUrl.replace(/^\//, '')}`) : null) 
-    : (otherUser?.avatarUrl ? (otherUser.avatarUrl.startsWith('http') ? otherUser.avatarUrl : `${API_BASE_URL}/${otherUser.avatarUrl.replace(/^\//, '')}`) : null);
+  const avatar = currentChat?.isGroup ? currentChat?.avatarUrl : otherUser?.avatarUrl;
+  const avatarUrl = avatar 
+    ? (avatar.startsWith('http') ? avatar : `${API_BASE_URL}/${avatar.replace(/^\//, '')}`) 
+    : `https://ui-avatars.com/api/?name=${encodeURIComponent(chatName)}&background=random&color=fff`;
 
   useEffect(() => {
     const backAction = () => {

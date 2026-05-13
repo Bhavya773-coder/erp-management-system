@@ -110,6 +110,33 @@ router.post('/forward', authenticate, async (req, res) => {
   }
 });
 
+// @route   GET /api/messages/shared/documents
+// @desc    Get all FILE messages shared with or by the current user
+// @access  Private
+router.get('/shared/documents', authenticate, async (req, res) => {
+  try {
+    // Find all chats the user is part of
+    const chats = await Chat.find({ 'members.user': req.user._id });
+    const chatIds = chats.map(c => c._id);
+    
+    // Find all FILE messages in those chats
+    const documents = await Message.find({
+      chat: { $in: chatIds },
+      messageType: 'FILE',
+      isDeleted: false
+    })
+      .populate('sender', 'name')
+      .populate('chat', 'name isGroup')
+      .sort({ createdAt: -1 })
+      .limit(50);
+
+    res.json({ success: true, data: { documents } });
+  } catch (error) {
+    console.error('Get shared documents error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
 // @route   GET /api/messages/:chatId
 // @desc    Get messages for a chat
 // @access  Private

@@ -72,11 +72,20 @@ app.use((req, res, next) => {
   next();
 });
 
+// API Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/chats', chatRoutes);
+app.use('/api/messages', messageRoutes);
+app.use('/api/files', fileRoutes);
+app.use('/api/fleet', fleetRoutes);
+
 // Static files for uploads
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // Serve static files from the React app
-const distPath = path.resolve(process.cwd(), 'client', 'dist');
+// __dirname is /app/server on Railway
+const distPath = path.join(__dirname, '..', 'client', 'dist');
 const indexFile = path.join(distPath, 'index.html');
 
 console.log(`📂 Path Diagnostic:`);
@@ -87,17 +96,18 @@ console.log(`   - Resolved Dist Path: ${distPath}`);
 if (fs.existsSync(distPath)) {
   console.log(`✅ Web client found at ${distPath}. Serving static files.`);
   app.use(express.static(distPath));
+  
+  // Handle SPA routing - serve index.html for any unknown routes
+  app.get('*', (req, res, next) => {
+    if (!req.path.startsWith('/api')) {
+      res.sendFile(indexFile);
+    } else {
+      next();
+    }
+  });
 } else {
   console.log(`ℹ️ Web client not found at ${distPath}. Server will operate in API-only mode.`);
 }
-
-// API Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/chats', chatRoutes);
-app.use('/api/messages', messageRoutes);
-app.use('/api/files', fileRoutes);
-app.use('/api/fleet', fleetRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

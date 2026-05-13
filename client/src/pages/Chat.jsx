@@ -47,7 +47,9 @@ export default function Chat() {
     deleteMessageSocket,
     startTyping,
     stopTyping,
-    markMessagesSeen
+    markMessagesSeen,
+    sendVoucherAction,
+    sendTaskAction
   } = useSocket(token);
 
   // Fetch initial data
@@ -304,6 +306,8 @@ export default function Chat() {
             onStartTyping={() => startTyping(currentChat.id)}
             onStopTyping={() => stopTyping(currentChat.id)}
             onDeleteChat={deleteChat}
+            onVoucherAction={sendVoucherAction}
+            onTaskAction={sendTaskAction}
             onBack={() => {
               setCurrentChat(null);
               if (window.innerWidth < 768) setShowSidebar(true);

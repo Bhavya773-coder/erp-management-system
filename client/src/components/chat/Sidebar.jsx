@@ -5,12 +5,12 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { 
-  Search, 
-  Plus, 
-  Users, 
-  MessageCircle, 
-  LogOut, 
+import {
+  Search,
+  Plus,
+  Users,
+  MessageCircle,
+  LogOut,
   Check,
   CheckCheck,
   Clock,
@@ -22,21 +22,21 @@ import {
 import { format, isToday, isYesterday, isThisWeek } from 'date-fns';
 import { useAuthStore } from '@/store/authStore';
 import { translations, translateValue } from '@/lib/translations';
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 
-export default function Sidebar({ 
-  currentUser, 
-  chats, 
-  users, 
+export default function Sidebar({
+  currentUser,
+  chats,
+  users,
   typingUsers = {},
-  currentChat, 
-  onChatSelect, 
-  onCreateChat, 
+  currentChat,
+  onChatSelect,
+  onCreateChat,
   onCreateGroup,
   onEditProfile,
   onLogout,
@@ -69,11 +69,11 @@ export default function Sidebar({
     }
   };
 
-  const filteredChats = chats.filter(chat => 
+  const filteredChats = chats.filter(chat =>
     chat.name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const filteredUsers = users.filter(user => 
+  const filteredUsers = users.filter(user =>
     user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     user.email.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -149,7 +149,7 @@ export default function Sidebar({
               </div>
             </div>
           </div>
-          
+
           <div className="flex items-center space-x-1 shrink-0">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -164,19 +164,19 @@ export default function Sidebar({
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="h-9 w-9 text-gray-400 hover:text-whatsapp-primary hover:bg-whatsapp-primary/5 rounded-full" 
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 text-gray-400 hover:text-whatsapp-primary hover:bg-whatsapp-primary/5 rounded-full"
               onClick={onEditProfile}
             >
               <Settings className="h-5 w-5" />
             </Button>
-            
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="h-9 w-9 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-full" 
+
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-full"
               onClick={onLogout}
             >
               <LogOut className="h-5 w-5" />
@@ -186,14 +186,14 @@ export default function Sidebar({
 
         {/* Global Navigation - Full Width Stack */}
         <div className="space-y-2 mb-6">
-          <button 
+          <button
             onClick={onToggleAI}
             className="w-full flex items-center justify-center py-4 bg-whatsapp-primary/5 hover:bg-whatsapp-primary text-whatsapp-primary hover:text-white rounded-[1.5rem] border border-whatsapp-primary/10 transition-all group"
           >
             <Sparkles className="h-5 w-5 mr-3 group-hover:rotate-12 transition-transform" />
             <span className="text-xs font-black uppercase tracking-[0.2em]">Utilities</span>
           </button>
-          
+
           {currentUser?.role === 'ADMIN' && (
             <Link to="/admin" className="block">
               <button className="w-full flex items-center justify-center py-4 bg-gray-50/50 hover:bg-gray-900 text-gray-400 hover:text-white rounded-[1.5rem] border border-gray-100/50 transition-all group">
@@ -228,8 +228,8 @@ export default function Sidebar({
                   <p className="text-[9px] text-orange-50 font-bold leading-tight">Don't miss new messages!</p>
                 </div>
               </div>
-              <Button 
-                size="sm" 
+              <Button
+                size="sm"
                 className="h-8 bg-white text-orange-600 hover:bg-orange-50 font-black text-[10px] rounded-xl px-4"
                 onClick={() => {
                   Notification.requestPermission().then(permission => {
@@ -251,8 +251,8 @@ export default function Sidebar({
       {/* Action Buttons & Tabs */}
       <div className="p-3 border-b border-gray-100">
         <div className="flex space-x-2 mb-3">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             className="flex-1 text-xs h-8"
             onClick={() => {
               setView('directory');
@@ -261,8 +261,8 @@ export default function Sidebar({
             <Plus className="w-3 h-3 mr-1" />
             {t.newChat}
           </Button>
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             className="flex-1 text-xs h-8"
             onClick={onCreateGroup}
           >
@@ -270,21 +270,21 @@ export default function Sidebar({
             {t.newGroup}
           </Button>
         </div>
-        
+
         <div className="flex bg-gray-100 p-1 rounded-lg">
-          <button 
+          <button
             onClick={() => setView('chats')}
             className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${view === 'chats' ? 'bg-white shadow-sm text-whatsapp-primary' : 'text-gray-500 hover:text-gray-700'}`}
           >
             {t.chats || 'Chats'}
           </button>
-          <button 
+          <button
             onClick={() => setView('directory')}
             className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all relative ${view === 'directory' ? 'bg-white shadow-sm text-whatsapp-primary' : 'text-gray-500 hover:text-gray-700'}`}
           >
             {t.directory || 'Directory'}
           </button>
-          <button 
+          <button
             onClick={() => {
               setView('reminders');
               fetchAllReminders();
@@ -425,7 +425,7 @@ export default function Sidebar({
                           <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></div>
                         )}
                       </div>
-                      
+
                       <div className="ml-3 flex-1 min-w-0">
                         <div className="flex justify-between items-baseline">
                           <p className={`font-semibold truncate ${isActive ? 'text-whatsapp-primary' : 'text-gray-900'}`}>
@@ -444,12 +444,12 @@ export default function Sidebar({
                             </div>
                           )}
                         </div>
-                        
+
                         <div className="flex items-center mt-0.5">
                           {typingUsers[chat.id]?.length > 0 ? (
                             <p className="text-xs text-whatsapp-primary font-medium animate-pulse">
-                              {chat.isGroup 
-                                ? (typingUsers[chat.id].length === 1 
+                              {chat.isGroup
+                                ? (typingUsers[chat.id].length === 1
                                     ? `${users.find(u => u.id === typingUsers[chat.id][0])?.name || 'Someone'} is typing...`
                                     : `${typingUsers[chat.id].length} people are typing...`)
                                 : 'Typing...'
@@ -467,9 +467,17 @@ export default function Sidebar({
                                   lastMessage.isDeleted ? (
                                     <span className="italic">This message was deleted</span>
                                   ) : (
-                                    lastMessage.messageType === 'TEXT' 
-                                      ? lastMessage.content 
-                                      : (lastMessage.messageType === 'SCHEDULE' ? '⏰ Scheduled Reminder' : `Shared ${lastMessage.messageType.toLowerCase()}`)
+                                    lastMessage.messageType === 'TEXT'
+                                      ? lastMessage.content
+                                      : lastMessage.messageType === 'SCHEDULE'
+                                        ? '⏰ Scheduled Reminder'
+                                        : lastMessage.messageType === 'FILE'
+                                          ? `📎 ${(lastMessage.fileName || lastMessage.content || 'Document').substring(0, 25)}${(lastMessage.fileName || lastMessage.content || '').length > 25 ? '...' : ''}`
+                                          : lastMessage.messageType === 'IMAGE'
+                                            ? '📷 Photo'
+                                            : lastMessage.messageType === 'VOUCHER'
+                                              ? '🎫 Voucher'
+                                              : `Shared ${lastMessage.messageType.toLowerCase()}`
                                   )
                                 ) : (
                                   'No messages yet'

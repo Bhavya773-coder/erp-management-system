@@ -26,7 +26,7 @@ export default function VoucherDetailModal({ visible, onClose, voucher, onImageP
   const { voucherData, fileUrl, createdAt, sender } = voucher;
   const images = fileUrl ? fileUrl.split(',') : [];
   const formattedDate = createdAt ? format(new Date(createdAt), 'dd MMMM yyyy') : 'N/A';
-  const preparedBy = sender?.name || 'Unknown';
+  const preparedBy = voucherData.preparedBy || sender?.name || 'Unknown';
   const fullCompanyName = COMPANY_NAMES[voucherData.company] || voucherData.company;
 
   const handlePrint = async () => {

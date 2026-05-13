@@ -38,7 +38,21 @@ const Countdown = ({ targetDate }) => {
   );
 };
 
-export default function MessageBubble({ message, isOwn, showAvatar, onDelete, onForward, onComplete, onStopAlarm, isForwardMode, isSelected, onToggleSelect }) {
+export default function MessageBubble({ 
+  currentUser,
+  message, 
+  isOwn, 
+  showAvatar, 
+  onDelete, 
+  onForward, 
+  onComplete, 
+  onStopAlarm, 
+  isForwardMode, 
+  isSelected, 
+  onToggleSelect,
+  onVoucherAction,
+  onTaskAction
+}) {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [localCompleted, setLocalCompleted] = useState(false);
@@ -79,7 +93,7 @@ export default function MessageBubble({ message, isOwn, showAvatar, onDelete, on
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  const shortenFileName = (name, maxLength = 12) => {
+  const shortenFileName = (name, maxLength = 28) => {
     if (!name) return 'File';
     if (name.length <= maxLength + 5) return name; // e.g. short name + .pdf
     const parts = name.split('.');
@@ -237,19 +251,20 @@ export default function MessageBubble({ message, isOwn, showAvatar, onDelete, on
     }
 
     if (message.messageType === 'FILE' && message.fileUrl) {
+      const displayName = message.fileName || message.content || 'Document';
       return (
         <div className="space-y-2">
-          <div className="flex items-center p-3 bg-white/50 rounded-lg">
-            <div className="w-10 h-10 bg-whatsapp-primary rounded-lg flex items-center justify-center mr-3">
+          <div className="flex items-center p-3 bg-white/50 rounded-lg min-w-[220px]">
+            <div className="w-10 h-10 bg-whatsapp-primary rounded-lg flex items-center justify-center mr-3 shrink-0">
               <FileText className="w-5 h-5 text-white" />
             </div>
-            <div className="flex-1 min-w-0 mr-4">
-              <p className="text-sm font-medium truncate" title={message.fileName}>
-                {shortenFileName(message.fileName)}
+            <div className="flex-1 min-w-0 mr-3">
+              <p className="text-sm font-medium break-words" title={displayName} style={{ wordBreak: 'break-word' }}>
+                {shortenFileName(displayName)}
               </p>
               <p className="text-xs text-gray-500">{formatFileSize(message.fileSize)}</p>
             </div>
-            <div className="flex space-x-1">
+            <div className="flex space-x-1 shrink-0">
               <button 
                 onClick={() => window.open(fullFileUrl, '_blank')}
                 className="p-2 hover:bg-white/50 rounded-full text-gray-600"
@@ -259,16 +274,147 @@ export default function MessageBubble({ message, isOwn, showAvatar, onDelete, on
               </button>
               <button 
                 onClick={handleFileDownload}
-                className="p-2 hover:bg-white/50 rounded-full text-gray-600"
+                className="p-2 hover:bg-whatsapp-primary/10 rounded-full text-whatsapp-primary"
                 title="Download"
               >
                 <Download className="w-4 h-4" />
               </button>
             </div>
           </div>
-          {message.content && (
+          {message.content && message.content !== message.fileName && (
             <p className="text-sm">{message.content}</p>
           )}
+        </div>
+      );
+    }
+
+    if (message.messageType === 'VOUCHER') {
+      const v = message.voucherData;
+      if (!v) return null;
+      
+      return (
+        <div className="bg-white rounded-xl overflow-hidden border border-gray-100 shadow-sm min-w-[280px]">
+          <div className="p-4 border-b border-gray-50 flex items-center justify-between bg-gray-50/50">
+            <div className="flex items-center space-x-2">
+              <div className="p-2 bg-whatsapp-primary/10 rounded-lg">
+                <FileText className="w-5 h-5 text-whatsapp-primary" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Voucher</p>
+                <p className="text-sm font-bold text-gray-800">{v.number}</p>
+              </div>
+            </div>
+            <div className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
+              v.status === 'APPROVED' ? 'bg-green-100 text-green-600' : 
+              v.status === 'DENIED' ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'
+            }`}>
+              {v.status}
+            </div>
+          </div>
+          
+          <div className="p-4 space-y-3">
+            <div className="text-center py-2">
+              <p className="text-[10px] text-gray-400 uppercase font-bold mb-1">Amount</p>
+              <p className="text-3xl font-black text-whatsapp-primary">₹{v.amount?.toLocaleString('en-IN')}</p>
+            </div>
+            
+            <div className="space-y-1">
+              <p className="text-[11px] text-gray-500">
+                <span className="font-bold text-gray-400 uppercase mr-2">Prepared:</span> {v.preparedBy || message.sender?.name || 'Unknown'}
+              </p>
+              {v.approvedBy && (
+                <p className="text-[11px] text-gray-500">
+                  <span className="font-bold text-gray-400 uppercase mr-2">Approved:</span> {v.approvedBy}
+                </p>
+              )}
+            </div>
+
+            {message.fileUrl && (
+              <div className="flex gap-2 pt-2 overflow-x-auto pb-1">
+                {message.fileUrl.split(',').map((url, idx) => (
+                  <img 
+                    key={idx}
+                    src={getFullUrl(url)} 
+                    className="w-12 h-12 rounded object-cover border border-gray-200 cursor-pointer hover:opacity-80 transition-opacity"
+                    onClick={() => window.open(getFullUrl(url), '_blank')}
+                    alt="Supporting"
+                  />
+                ))}
+              </div>
+            )}
+            
+            {v.status === 'PENDING' && (currentUser?.role === 'ADMIN' || currentUser?.role === 'ACCOUNTS') && (
+              <div className="flex gap-2 pt-2">
+                <Button 
+                  size="sm" 
+                  className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold h-9"
+                  onClick={() => onVoucherAction(message.id, 'APPROVED')}
+                >
+                  Approve
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="destructive"
+                  className="flex-1 font-bold h-9"
+                  onClick={() => onVoucherAction(message.id, 'DENIED')}
+                >
+                  Deny
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    if (message.messageType === 'TASK') {
+      const t = message.taskData;
+      if (!t) return null;
+      
+      return (
+        <div className="bg-white rounded-xl overflow-hidden border border-gray-100 shadow-sm min-w-[280px]">
+          <div className="p-4 border-b border-gray-50 flex items-center justify-between bg-orange-50/30">
+            <div className="flex items-center space-x-2">
+              <div className="p-2 bg-orange-500/10 rounded-lg">
+                <Timer className="w-5 h-5 text-orange-500" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Task Assignment</p>
+                <p className="text-sm font-bold text-gray-800">{t.title}</p>
+              </div>
+            </div>
+            {t.status === 'PENDING' && (
+              <div className="bg-white px-2 py-1 rounded-full border border-orange-100 shadow-sm flex items-center space-x-1">
+                <Timer className="w-3 h-3 text-orange-500" />
+                <Countdown targetDate={t.endTime} />
+              </div>
+            )}
+            {t.status === 'COMPLETED' && (
+              <div className="bg-green-100 text-green-600 px-2 py-1 rounded text-[10px] font-bold uppercase">
+                COMPLETED
+              </div>
+            )}
+          </div>
+          
+          <div className="p-4 space-y-3">
+            <p className="text-sm text-gray-700">{t.description}</p>
+            
+            <div className="pt-2 border-t border-gray-50">
+              <p className="text-[11px] text-gray-500">
+                <span className="font-bold text-gray-400 uppercase mr-2">Assigned To:</span> {t.assignedToName}
+              </p>
+            </div>
+
+            {t.status === 'PENDING' && (currentUser?.id === t.assignedTo || currentUser?._id === t.assignedTo) && (
+              <Button 
+                size="sm" 
+                className="w-full bg-green-500 hover:bg-green-600 text-white font-bold h-9 mt-2"
+                onClick={() => onTaskAction(message.id, 'COMPLETED')}
+              >
+                Mark as Completed
+              </Button>
+            )}
+          </div>
         </div>
       );
     }

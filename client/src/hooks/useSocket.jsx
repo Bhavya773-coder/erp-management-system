@@ -349,6 +349,14 @@ export const useSocket = (token) => {
     }
   }, []);
 
+  const sendVoucherAction = useCallback((messageId, action) => {
+    if (socketRef.current) socketRef.current.emit('voucher:action', { messageId, action });
+  }, []);
+
+  const sendTaskAction = useCallback((messageId, action) => {
+    if (socketRef.current) socketRef.current.emit('task:action', { messageId, action });
+  }, []);
+
   return {
     socket: socketRef.current,
     joinChat,
@@ -360,6 +368,8 @@ export const useSocket = (token) => {
     startTyping,
     stopTyping,
     markMessagesSeen,
+    sendVoucherAction,
+    sendTaskAction,
     subscribeToPush: subscribeToPushSingleton
   };
 };

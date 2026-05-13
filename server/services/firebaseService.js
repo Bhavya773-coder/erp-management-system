@@ -44,12 +44,15 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
   console.warn('⚠️ Firebase credentials not found (checked FIREBASE_SERVICE_ACCOUNT env and ' + serviceAccountPath + ')');
 }
 
+import User from '../models/User.js';
+
 /**
  * Send direct FCM notifications using Firebase Admin SDK
  * @param {string[]} tokens - Array of FCM tokens
  * @param {object} payload - { title, body, data, badge }
+ * @param {string} userId - Optional userId to cleanup invalid tokens
  */
-export const sendFCMNotifications = async (tokens, payload) => {
+export const sendFCMNotifications = async (tokens, payload, userId = null) => {
   if (!firebaseApp || !tokens || tokens.length === 0) return;
 
   const message = {
@@ -82,12 +85,30 @@ export const sendFCMNotifications = async (tokens, payload) => {
     console.log(`✅ FCM: Successfully sent ${response.successCount} messages; ${response.failureCount} errors.`);
     
     if (response.failureCount > 0) {
-      // In a real app, you'd handle invalid tokens here
+      const tokensToRemove = [];
       response.responses.forEach((resp, idx) => {
         if (!resp.success) {
-          console.error(`❌ FCM Error for token ${tokens[idx]}:`, resp.error.message);
+          const errorCode = resp.error.code;
+          const errorMessage = resp.error.message;
+          console.error(`❌ FCM Error for token ${tokens[idx]}:`, errorMessage);
+
+          // Standard cleanup for invalid/expired tokens
+          if (
+            errorCode === 'messaging/registration-token-not-registered' ||
+            errorCode === 'messaging/invalid-registration-token' ||
+            errorMessage.includes('SenderId mismatch')
+          ) {
+            tokensToRemove.push(tokens[idx]);
+          }
         }
       });
+
+      if (tokensToRemove.length > 0 && userId) {
+        console.log(`🧹 Cleaning up ${tokensToRemove.length} invalid FCM tokens for user ${userId}...`);
+        await User.findByIdAndUpdate(userId, {
+          $pull: { fcmTokens: { $in: tokensToRemove } }
+        });
+      }
     }
     return response;
   } catch (error) {

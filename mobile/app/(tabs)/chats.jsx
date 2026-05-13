@@ -36,7 +36,9 @@ export default function ChatsScreen() {
     const otherMember = chat.members?.find(m => (m.user?.id || m.user?._id)?.toString() !== myId?.toString())?.user;
     const chatName = isGroup ? chat.name : (chat.name || otherMember?.name || 'Chat');
     const avatar = isGroup ? chat.avatarUrl : otherMember?.avatarUrl;
-    const avatarUrl = avatar ? (avatar.startsWith('http') ? avatar : `${API_BASE_URL}/${avatar.replace(/^\//, '')}`) : null;
+    const avatarUrl = avatar 
+      ? (avatar.startsWith('http') ? avatar : `${API_BASE_URL}/${avatar.replace(/^\//, '')}`) 
+      : `https://ui-avatars.com/api/?name=${encodeURIComponent(chatName)}&background=random&color=fff`;
     const lastMsg = chat.lastMessage;
     const unreadCount = chat.unreadCount || 0;
     
@@ -50,9 +52,14 @@ export default function ChatsScreen() {
       if (!lastMsg) return 'No messages yet';
       if (lastMsg.isDeleted) return '🚫 Deleted';
       if (lastMsg.messageType === 'IMAGE') return '📷 Photo';
-      if (lastMsg.messageType === 'FILE') return '📎 File';
+      if (lastMsg.messageType === 'FILE') {
+        const name = lastMsg.fileName || lastMsg.content || 'Document';
+        const maxLen = 20;
+        return `📎 ${name.length > maxLen ? name.substring(0, maxLen) + '...' : name}`;
+      }
       if (lastMsg.messageType === 'SCHEDULE') return '📅 Schedule';
-      if (lastMsg.messageType === 'VOUCHER') return '🎫 Voucher';
+      if (lastMsg.messageType === 'VOUCHER') return `🎫 Voucher ${lastMsg.voucherData?.number || ''}`;
+      if (lastMsg.messageType === 'TASK') return `⏰ Task: ${lastMsg.taskData?.title || 'Assigned'}`;
       return lastMsg.content || '';
     };
 

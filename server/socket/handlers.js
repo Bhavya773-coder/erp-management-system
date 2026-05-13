@@ -98,7 +98,10 @@ export const setupSocketHandlers = (io) => {
             { returnDocument: 'after', upsert: true }
           );
           const number = `${prefix}-${seqDoc.seq.toString().padStart(3, '0')}`;
-          finalVoucherData = { ...voucherData, number, status: 'PENDING' };
+          // Auto-populate preparedBy with the sender's name
+          const senderUser = await User.findById(socket.userId);
+          const preparedBy = voucherData.preparedBy || senderUser?.name || 'Unknown';
+          finalVoucherData = { ...voucherData, number, status: 'PENDING', preparedBy };
         }
 
         // Create message
@@ -249,12 +252,12 @@ export const setupSocketHandlers = (io) => {
                 const chatName = updatedChat.isGroup ? updatedChat.name : formattedMessage.sender.name;
                 getUserTotalUnreadCount(userId).then(totalUnread => {
                   console.log(`🚀 Dispatching FCM notification to ${userId} (${fcmTokens.length} tokens)`);
-                  sendFCMNotifications(fcmTokens, {
-                    title: chatName,
-                    body: pushBody,
-                    badge: totalUnread,
-                    data: { chatId: formattedMessage.chatId, type: 'message' }
-                  });
+                    sendFCMNotifications(fcmTokens, {
+                      title: chatName,
+                      body: pushBody,
+                      badge: totalUnread,
+                      data: { chatId: formattedMessage.chatId, type: 'message' }
+                    }, userId);
                 });
               } else if (expoPushTokens && expoPushTokens.length > 0) {
                 // --- Expo Push (Fallback) ---
@@ -324,7 +327,7 @@ export const setupSocketHandlers = (io) => {
               title: `Task Completed`,
               body: `Task "${taskTitle}" has been completed.`,
               data: { type: 'task', chatId: message.chat._id.toString() }
-            });
+            }, message.sender._id.toString());
           } else if (senderUser.expoPushTokens && senderUser.expoPushTokens.length > 0) {
             sendExpoPushNotifications(senderUser.expoPushTokens, {
               title: `Task Completed`,
@@ -386,7 +389,7 @@ export const setupSocketHandlers = (io) => {
             title: `Voucher ${action}`,
             body: `Voucher ${message.voucherData.number} has been ${action.toLowerCase()}.`,
             data: { type: 'voucher', chatId: message.chat._id.toString() }
-          });
+          }, message.sender._id.toString());
         }
 
         if (action === 'APPROVED') {

@@ -29,6 +29,7 @@ import { useToast } from '@/hooks/use-toast';
 import { format, isToday, isYesterday } from 'date-fns';
 import ScheduleDialog from './ScheduleDialog';
 import ForwardMessageModal from './ForwardMessageModal';
+import { Download, FileText } from 'lucide-react';
 
 export default function ChatWindow({
   currentUser,
@@ -41,6 +42,8 @@ export default function ChatWindow({
   onStartTyping,
   onStopTyping,
   onDeleteChat,
+  onVoucherAction,
+  onTaskAction,
   onBack
 }) {
   const { language } = useAuthStore();
@@ -389,6 +392,7 @@ export default function ChatWindow({
                       </div>
                     )}
                     <MessageBubble
+                      currentUser={currentUser}
                       message={message}
                       isOwn={(message.senderId || message.sender?._id || message.sender?.id)?.toString() === currentUser?.id?.toString()}
                       showAvatar={!chat.isGroup ? false : true}
@@ -399,6 +403,8 @@ export default function ChatWindow({
                       isForwardMode={isForwardMode}
                       isSelected={selectedMessages.includes(message.id)}
                       onToggleSelect={() => toggleMessageSelection(message.id)}
+                      onVoucherAction={onVoucherAction}
+                      onTaskAction={onTaskAction}
                     />
                   </div>
                 );
@@ -614,6 +620,52 @@ export default function ChatWindow({
                   </div>
                 </>
               )}
+
+              <Separator className="my-6" />
+
+              {/* Shared Documents */}
+              <div className="space-y-3 text-left">
+                <p className="text-xs font-bold text-whatsapp-dark uppercase tracking-wider flex items-center gap-2">
+                  <FileText className="w-3.5 h-3.5" /> Shared Documents
+                </p>
+                {messages.filter(m => m.messageType === 'FILE' && !m.isDeleted).length === 0 ? (
+                  <p className="text-sm text-gray-500 italic">No documents shared in this chat</p>
+                ) : (
+                  <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                    {messages.filter(m => m.messageType === 'FILE' && !m.isDeleted).map((doc) => {
+                      const fileName = doc.fileName || doc.content || 'Document';
+                      const truncated = fileName.length > 25 ? fileName.substring(0, 22) + '...' + (fileName.split('.').pop() || '') : fileName;
+                      const fullUrl = (() => {
+                        if (!doc.fileUrl) return '';
+                        if (doc.fileUrl.startsWith('http')) return doc.fileUrl;
+                        const base = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000';
+                        return `${base}${doc.fileUrl}`;
+                      })();
+                      return (
+                        <div key={doc.id} className="flex items-center p-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                          <div className="w-8 h-8 bg-whatsapp-primary rounded-lg flex items-center justify-center mr-2 shrink-0">
+                            <FileText className="w-4 h-4 text-white" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium text-gray-900 truncate" title={fileName}>{truncated}</p>
+                            <p className="text-[10px] text-gray-500">{doc.sender?.name} • {doc.createdAt ? format(new Date(doc.createdAt), 'MMM d') : ''}</p>
+                          </div>
+                          <a
+                            href={fullUrl}
+                            download={fileName}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-1.5 hover:bg-whatsapp-primary/10 rounded-full text-whatsapp-primary transition-colors"
+                            title="Download"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                          </a>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
 
               <Separator className="my-6" />
 

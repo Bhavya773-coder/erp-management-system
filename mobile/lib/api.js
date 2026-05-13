@@ -77,6 +77,7 @@ export const messageAPI = {
   forwardBulk: (messageIds, targetChatIds) =>
     api.post('/messages/forward/bulk', { messageIds, targetChatIds }),
   getMessageForForward: (id) => api.get(`/messages/forward/${id}`),
+  getSharedDocuments: () => api.get('/messages/shared/documents'),
 };
 
 // ─── File APIs ──────────────────────────────────────────────────────────
@@ -89,6 +90,14 @@ export const fileAPI = {
     });
   },
   getFullUrl: (path) => `${API_BASE_URL}${path}`,
+};
+
+// ─── Fleet APIs ─────────────────────────────────────────────────────────
+export const fleetAPI = {
+  getFiles: () => api.get('/fleet'),
+  getAssets: () => api.get('/fleet/assets'),
+  uploadFileMetadata: (data) => api.post('/fleet', data),
+  processFile: (id) => api.post(`/fleet/process/${id}`),
 };
 
 export default api;

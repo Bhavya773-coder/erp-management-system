@@ -18,6 +18,7 @@ import {
   X
 } from 'lucide-react';
 import { format } from 'date-fns';
+import AIAssetsView from './AIAssetsView';
 
 export default function FleetView({ onBack }) {
   const { user } = useAuthStore();
@@ -27,6 +28,8 @@ export default function FleetView({ onBack }) {
   const [description, setDescription] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
+  const [showAIAssets, setShowAIAssets] = useState(false);
+  const [processingId, setProcessingId] = useState(null);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -97,6 +100,23 @@ export default function FleetView({ onBack }) {
     }
   };
 
+  const handleProcessFile = async (id) => {
+    setProcessingId(id);
+    try {
+      const response = await fleetAPI.processFile(id);
+      if (response.data.success) {
+        const { updated, created } = response.data.data;
+        alert(`AI Processing Success!\nUpdated: ${updated}\nCreated: ${created}`);
+        setShowAIAssets(true);
+      }
+    } catch (error) {
+      console.error('Processing failed:', error);
+      alert('AI Processing failed. Ensure the Excel file follows the correct format.');
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
   const getFullUrl = (url) => {
     if (!url) return '';
     if (url.startsWith('http')) return url;
@@ -114,6 +134,10 @@ export default function FleetView({ onBack }) {
     f.fileName.toLowerCase().includes(searchQuery.toLowerCase()) ||
     f.description.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  if (showAIAssets) {
+    return <AIAssetsView onBack={() => setShowAIAssets(false)} />;
+  }
 
   if (activeTab === 'hub') {
     return (
@@ -156,17 +180,20 @@ export default function FleetView({ onBack }) {
                 <div className="h-px bg-whatsapp-primary/10 flex-1" />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="p-6 bg-white rounded-3xl border border-gray-100 shadow-sm opacity-50 cursor-not-allowed">
+                <button 
+                  onClick={() => setShowAIAssets(true)}
+                  className="p-6 bg-white rounded-3xl border border-gray-100 shadow-sm hover:shadow-md hover:border-whatsapp-primary/30 transition-all text-left"
+                >
                   <div className="flex items-center space-x-4">
-                    <div className="p-3 bg-gray-50 rounded-xl">
-                      <FileText className="w-6 h-6 text-gray-400" />
+                    <div className="p-3 bg-whatsapp-primary/10 rounded-xl">
+                      <FileText className="w-6 h-6 text-whatsapp-primary" />
                     </div>
                     <div>
-                      <h4 className="font-bold text-gray-900">AI Intelligence</h4>
-                      <p className="text-xs text-gray-400">Automated vessel data extraction (LOCKED)</p>
+                      <h4 className="font-bold text-gray-900">Asset Intelligence</h4>
+                      <p className="text-xs text-gray-500">Fleet monitoring & automated data extraction</p>
                     </div>
                   </div>
-                </div>
+                </button>
               </div>
             </div>
 
@@ -275,14 +302,20 @@ export default function FleetView({ onBack }) {
                         </div>
                       </div>
                       <div className="flex items-center space-x-1 sm:opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-8 w-8 sm:h-9 sm:w-9 text-whatsapp-primary hover:bg-whatsapp-primary/10 rounded-full"
-                          onClick={() => window.open(getFullUrl(file.fileUrl), '_blank')}
-                        >
                           <Download className="h-4 w-4 sm:h-5 sm:h-5" />
                         </Button>
+                        {file.fileName.match(/\.(xlsx|xls)$/i) && (
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className={`h-8 w-8 sm:h-9 sm:w-9 ${processingId === file._id ? 'text-gray-400' : 'text-purple-600 hover:bg-purple-50'} rounded-full`}
+                            onClick={() => handleProcessFile(file._id)}
+                            disabled={processingId === file._id}
+                            title="Process with AI"
+                          >
+                            {processingId === file._id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="h-4 w-4 sm:h-5 sm:h-5" />}
+                          </Button>
+                        )}
                         {(user.role === 'ADMIN' || file.uploadedBy?._id === user.id) && (
                           <Button 
                             variant="ghost" 

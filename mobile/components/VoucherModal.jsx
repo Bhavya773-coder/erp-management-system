@@ -5,6 +5,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, BorderRadius, Spacing, Fonts } from '@/constants/appTheme';
 import { fileAPI } from '../lib/api';
+import { useAuthStore } from '../store/authStore';
 
 const COMPANIES = [
   { label: 'Millennium Plaza', value: 'MP' },
@@ -16,6 +17,7 @@ const COMPANIES = [
 export default function VoucherModal({ visible, onClose, onSend }) {
   const Colors = useTheme();
   const insets = useSafeAreaInsets();
+  const { user } = useAuthStore();
   const [company, setCompany] = useState(COMPANIES[0].value);
   const [amount, setAmount] = useState('');
   const [narration, setNarration] = useState('');
@@ -64,7 +66,7 @@ export default function VoucherModal({ visible, onClose, onSend }) {
       }
       
       const fileUrl = uploadedUrls.join(',');
-      onSend({ company, amount: Number(amount), narration, status: 'PENDING' }, fileUrl);
+      onSend({ company, amount: Number(amount), narration, status: 'PENDING', preparedBy: user?.name || 'Unknown' }, fileUrl);
       
       // Reset
       setCompany(COMPANIES[0].value);

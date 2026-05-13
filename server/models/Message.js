@@ -16,6 +16,7 @@ const messageSchema = new mongoose.Schema({
     amount: { type: Number },
     narration: { type: String },
     status: { type: String, enum: ['PENDING', 'APPROVED', 'DENIED'], default: 'PENDING' },
+    preparedBy: { type: String },
     approvedBy: { type: String },
     approvedAt: { type: Date }
   },

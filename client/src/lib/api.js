@@ -77,6 +77,8 @@ export const fleetAPI = {
   getFiles: () => api.get('/fleet'),
   uploadFile: (data) => api.post('/fleet', data),
   deleteFile: (id) => api.delete(`/fleet/${id}`),
+  processFile: (id) => api.post(`/fleet/process/${id}`),
+  getAssets: () => api.get('/fleet/assets'),
 };
 
 // File APIs

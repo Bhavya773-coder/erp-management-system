@@ -10,7 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { useChatStore } from '../../store/chatStore';
 import { useAuthStore } from '../../store/authStore';
@@ -24,6 +24,26 @@ import VoucherModal from '../../components/VoucherModal';
 import VoucherDetailModal from '../../components/VoucherDetailModal';
 import TaskModal from '../../components/TaskModal';
 import TaskDetailModal from '../../components/TaskDetailModal';
+import * as IntentLauncher from 'expo-intent-launcher';
+
+const getMimeType = (filename) => {
+  const ext = filename?.split('.').pop().toLowerCase();
+  const map = {
+    'pdf': 'application/pdf',
+    'doc': 'application/msword',
+    'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'xls': 'application/vnd.ms-excel',
+    'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'ppt': 'application/vnd.ms-powerpoint',
+    'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'png': 'image/png',
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'zip': 'application/zip',
+    'txt': 'text/plain',
+  };
+  return map[ext] || 'application/octet-stream';
+};
 
 const formatTime = (timeStr) => {
   if (!timeStr) return '--:--';
@@ -38,9 +58,12 @@ const getMediaUrl = (url) => {
 };
 
 const getAvatarUrl = (currentChat, otherUser) => {
-  return currentChat?.isGroup 
-    ? (currentChat?.avatarUrl ? getMediaUrl(currentChat.avatarUrl) : null) 
-    : (otherUser?.avatarUrl ? getMediaUrl(otherUser.avatarUrl) : null);
+  const name = currentChat?.isGroup ? currentChat?.name : otherUser?.name;
+  const avatar = currentChat?.isGroup ? currentChat?.avatarUrl : otherUser?.avatarUrl;
+  if (avatar) {
+    return avatar.startsWith('http') ? avatar : `${API_BASE_URL}/${avatar.replace(/^\//, '')}`;
+  }
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'User')}&background=random&color=fff`;
 };
 
 const LiveTimer = ({ endTime, completedAt, status }) => {
@@ -115,18 +138,16 @@ const s = StyleSheet.create({
   forwardText: { fontSize: Fonts.sizes.xs, marginLeft: 4, fontStyle: 'italic' },
   deletedRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   deletedText: { fontSize: Fonts.sizes.sm, fontStyle: 'italic' },
-  voucherBox: { padding: 8, backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: 8, width: 220 },
-  voucherHeader: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 },
-  voucherCompany: { fontWeight: 'bold' },
-  voucherNumber: { fontSize: 12 },
-  voucherAmount: { fontSize: 16, fontWeight: 'bold', marginVertical: 4 },
-  voucherNarration: { fontSize: 12, marginBottom: 8 },
-  voucherSuppGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginBottom: 8 },
-  voucherSuppImg: { width: 45, height: 45, borderRadius: 4 },
-  voucherActions: { flexDirection: 'row', gap: 8 },
-  voucherBtn: { flex: 1, padding: 8, borderRadius: 4, alignItems: 'center' },
-  voucherBtnText: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },
-  voucherStatusBadge: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, backgroundColor: 'rgba(0,0,0,0.1)' },
+  voucherBox: { padding: 12, backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: BorderRadius.lg, width: 240 },
+  voucherHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  voucherNum: { fontSize: 14, fontWeight: '700', flex: 1 },
+  statusTag: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
+  statusTagText: { color: '#FFF', fontSize: 10, fontWeight: 'bold' },
+  voucherAmt: { fontSize: 24, fontWeight: '800', marginBottom: 8 },
+  voucherMeta: { fontSize: 11 },
+  voucherBtn: { paddingVertical: 10, borderRadius: BorderRadius.md, alignItems: 'center' },
+  voucherBtnText: { fontSize: 13, fontWeight: '700' },
+  voucherStatusBadge: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
   inputContainer: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 6, paddingTop: 4, backgroundColor: 'transparent' },
   inputBubble: { flex: 1, flexDirection: 'row', alignItems: 'flex-end', backgroundColor: '#FFF', borderRadius: 28, paddingHorizontal: 12, paddingVertical: 4, marginBottom: 4, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 2 },
   attachBtn: { padding: 8, marginRight: 4 },
@@ -145,7 +166,7 @@ const s = StyleSheet.create({
   viewerImage: { width: '100%', height: '100%' }
 });
 
-const MessageItem = memo(({ msg, myId, currentChat, isMe, Colors, isSelected, isSelectionMode, onLongPress, onPress, onImagePress, onVoucherAction, onTaskAction, onDownload }) => {
+const MessageItem = memo(({ msg, myId, currentChat, isMe, Colors, isSelected, isSelectionMode, onLongPress, onPress, onImagePress, onVoucherAction, onTaskAction, onDownload, userRole, setSelectedVoucher, progress, isDownloaded }) => {
   const showSender = currentChat?.isGroup && !isMe;
   const time = msg.createdAt ? format(new Date(msg.createdAt), 'HH:mm') : '';
 
@@ -193,45 +214,6 @@ const MessageItem = memo(({ msg, myId, currentChat, isMe, Colors, isSelected, is
         {showSender && <Text style={[s.senderName, { color: Colors.accent }]}>{msg.sender?.name}</Text>}
         {msg.isDeleted ? (
           <View style={s.deletedRow}><Ionicons name="ban" size={14} color={Colors.textMuted} /><Text style={[s.deletedText, { color: Colors.textMuted }]}>Deleted</Text></View>
-        ) : msg.messageType === 'VOUCHER' && msg.voucherData ? (
-          <View style={s.voucherBox}>
-            <View style={s.voucherHeader}>
-              <Ionicons name="receipt" size={20} color={Colors.accent} />
-              <Text style={[s.voucherCompany, { color: Colors.textPrimary }]}>{msg.voucherData.company}</Text>
-            </View>
-            <Text style={[s.voucherNumber, { color: Colors.textSecondary }]}>#{msg.voucherData.number}</Text>
-            <Text style={[s.voucherAmount, { color: Colors.textPrimary }]}>₹{msg.voucherData.amount}</Text>
-            <Text style={[s.voucherNarration, { color: Colors.textSecondary }]}>{msg.voucherData.narration}</Text>
-            
-            {msg.fileUrl && (
-              <View style={s.voucherSuppGrid}>
-                {msg.fileUrl.split(',').slice(0, 4).map((url, idx) => (
-                  <TouchableOpacity key={idx} activeOpacity={0.8} onPress={() => onImagePress(msg, getMediaUrl(url))} style={s.voucherSuppImg}>
-                    <Image source={{ uri: getMediaUrl(url) }} style={{ width: '100%', height: '100%' }} />
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            {msg.voucherData.status === 'PENDING' ? (
-              !isMe ? (
-                <View style={s.voucherActions}>
-                  <TouchableOpacity style={[s.voucherBtn, { backgroundColor: '#4CAF50' }]} onPress={() => onVoucherAction(msg.id || msg._id, 'APPROVED')}>
-                    <Text style={s.voucherBtnText}>Approve</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[s.voucherBtn, { backgroundColor: '#F44336' }]} onPress={() => onVoucherAction(msg.id || msg._id, 'DENIED')}>
-                    <Text style={s.voucherBtnText}>Deny</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <View style={s.voucherStatusBadge}><Text style={{ color: Colors.textSecondary }}>PENDING</Text></View>
-              )
-            ) : (
-              <View style={[s.voucherStatusBadge, { backgroundColor: msg.voucherData.status === 'APPROVED' ? '#4CAF50' : '#F44336' }]}>
-                <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12 }}>{msg.voucherData.status}</Text>
-              </View>
-            )}
-          </View>
         ) : msg.messageType === 'IMAGE' ? (
           <View style={s.imageBox}>
             {msg.fileUrl && msg.fileUrl.includes(',') ? (
@@ -262,20 +244,37 @@ const MessageItem = memo(({ msg, myId, currentChat, isMe, Colors, isSelected, is
           <TouchableOpacity 
             activeOpacity={0.7} 
             onPress={() => onDownload(msg)}
-            style={[s.fileBox, { backgroundColor: isMe ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}
+            style={[s.fileBox, { backgroundColor: isMe ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.06)' }]}
           >
             <View style={[s.fileIconWrapper, { backgroundColor: Colors.accent }]}>
               <Ionicons name="document-text" size={24} color="#FFF" />
             </View>
             <View style={s.fileInfo}>
-              <Text style={[s.fileName, { color: Colors.textPrimary }]} numberOfLines={1} ellipsizeMode="middle">
-                {msg.fileName || msg.fileUrl?.split('/').pop() || 'File'}
+              <Text style={[s.fileName, { color: Colors.textPrimary }]} numberOfLines={2} ellipsizeMode="middle">
+                {msg.fileName || msg.content || msg.fileUrl?.split('/').pop() || 'Document'}
               </Text>
-              <Text style={[s.fileSize, { color: Colors.textSecondary }]}>
-                {msg.fileSize ? `${(msg.fileSize / 1024).toFixed(1)} KB` : 'Document'}
-              </Text>
+              {progress !== undefined ? (
+                <View style={{ marginTop: 4 }}>
+                  <View style={{ height: 4, backgroundColor: 'rgba(0,0,0,0.1)', borderRadius: 2, overflow: 'hidden' }}>
+                    <View style={{ height: '100%', width: `${progress * 100}%`, backgroundColor: Colors.accent }} />
+                  </View>
+                  <Text style={{ fontSize: 10, color: Colors.textSecondary, marginTop: 2 }}>
+                    {Math.round(progress * 100)}%
+                  </Text>
+                </View>
+              ) : (
+                <Text style={[s.fileSize, { color: Colors.textSecondary }]}>
+                  {msg.fileSize ? `${(msg.fileSize / 1024).toFixed(1)} KB` : 'Document'}
+                </Text>
+              )}
             </View>
-            <Ionicons name="download-outline" size={20} color={Colors.textSecondary} />
+            <View style={{ backgroundColor: Colors.accent + '20', borderRadius: 20, padding: 8 }}>
+              <Ionicons 
+                name={isDownloaded ? "eye-outline" : progress !== undefined ? "sync-outline" : "download-outline"} 
+                size={20} 
+                color={Colors.accent} 
+              />
+            </View>
           </TouchableOpacity>
         ) : msg.messageType === 'TASK' ? (
           <View style={[s.voucherBox, { backgroundColor: Colors.bgSecondary }]}>
@@ -290,10 +289,48 @@ const MessageItem = memo(({ msg, myId, currentChat, isMe, Colors, isSelected, is
               <LiveTimer endTime={msg.taskData?.endTime} status={msg.taskData?.status} completedAt={msg.taskData?.completedAt} />
             </View>
             
-            {msg.taskData?.status === 'PENDING' && msg.taskData?.assignedTo === myId && (
+            {msg.taskData?.status === 'PENDING' && (msg.taskData?.assignedTo === myId || msg.taskData?.assignedTo?._id === myId) && (
               <TouchableOpacity style={[s.voucherBtn, { backgroundColor: '#4CAF50', marginTop: 8 }]} onPress={() => onTaskAction(msg.id || msg._id, 'COMPLETED')}>
                 <Text style={s.voucherBtnText}>Mark Completed</Text>
               </TouchableOpacity>
+            )}
+          </View>
+        ) : msg.messageType === 'VOUCHER' ? (
+          <View style={[s.voucherBox, { backgroundColor: Colors.bgSecondary }]}>
+            <View style={s.voucherHeader}>
+              <Ionicons name="receipt" size={24} color={Colors.accent} style={{ marginRight: 8 }} />
+              <Text style={[s.voucherNum, { color: Colors.textPrimary }]}>{msg.voucherData?.number}</Text>
+              <View style={[s.statusTag, { backgroundColor: msg.voucherData?.status === 'APPROVED' ? '#4CAF50' : msg.voucherData?.status === 'DENIED' ? '#F44336' : Colors.accent }]}>
+                <Text style={s.statusTagText}>{msg.voucherData?.status}</Text>
+              </View>
+            </View>
+            <Text style={[s.voucherAmt, { color: Colors.accent }]}>₹{msg.voucherData?.amount?.toLocaleString('en-IN')}</Text>
+            <Text style={[s.voucherMeta, { color: Colors.textSecondary }]}>Prepared by: {msg.voucherData?.preparedBy || msg.sender?.name || 'Unknown'}</Text>
+            {msg.voucherData?.approvedBy && (
+              <Text style={[s.voucherMeta, { color: Colors.textSecondary, marginTop: 2 }]}>Approved by: {msg.voucherData.approvedBy}</Text>
+            )}
+            <TouchableOpacity 
+              style={[s.voucherBtn, { backgroundColor: Colors.accent + '20', marginTop: 12 }]} 
+              onPress={() => setSelectedVoucher(msg)}
+            >
+              <Text style={[s.voucherBtnText, { color: Colors.accent }]}>View Details</Text>
+            </TouchableOpacity>
+            
+            {msg.voucherData?.status === 'PENDING' && (userRole === 'ADMIN' || userRole === 'ACCOUNTS') && (
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                <TouchableOpacity 
+                  style={[s.voucherBtn, { backgroundColor: '#4CAF50', flex: 1 }]} 
+                  onPress={() => onVoucherAction(msg.id || msg._id, 'APPROVED')}
+                >
+                  <Text style={s.voucherBtnText}>Approve</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[s.voucherBtn, { backgroundColor: '#F44336', flex: 1 }]} 
+                  onPress={() => onVoucherAction(msg.id || msg._id, 'DENIED')}
+                >
+                  <Text style={s.voucherBtnText}>Deny</Text>
+                </TouchableOpacity>
+              </View>
             )}
           </View>
         ) : (
@@ -312,6 +349,9 @@ const MessageItem = memo(({ msg, myId, currentChat, isMe, Colors, isSelected, is
          prev.msg.status === next.msg.status && 
          prev.msg.voucherData?.status === next.msg.voucherData?.status &&
          prev.msg.taskData?.status === next.msg.taskData?.status &&
+         prev.userRole === next.userRole &&
+         prev.progress === next.progress &&
+         prev.isDownloaded === next.isDownloaded &&
          prev.msg.id === next.msg.id;
 });
 
@@ -342,9 +382,32 @@ export default function ChatScreen() {
   const [voucherDetailVisible, setVoucherDetailVisible] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [taskDetailVisible, setTaskDetailVisible] = useState(false);
+  const [downloadingItems, setDownloadingItems] = useState({}); // { msgId: progress }
+  const [localFiles, setLocalFiles] = useState({}); // { filename: true }
   
   const isFirstLoad = useRef(true);
   const skipScroll = useRef(false);
+
+  // Arcadia ERP folder setup
+  useEffect(() => {
+    const checkLocalFiles = async () => {
+      try {
+        const dir = `${FileSystem.documentDirectory}Arcadia_ERP/`;
+        const info = await FileSystem.getInfoAsync(dir);
+        if (!info.exists) {
+          await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+        } else {
+          const files = await FileSystem.readDirectoryAsync(dir);
+          const fileMap = {};
+          files.forEach(f => { fileMap[f] = true; });
+          setLocalFiles(fileMap);
+        }
+      } catch (e) {
+        console.error('FS Setup Error:', e);
+      }
+    };
+    checkLocalFiles();
+  }, []);
   
   const myId = user?.id || user?._id;
 
@@ -549,36 +612,102 @@ export default function ChatScreen() {
 
   const handleDownloadFile = async (msg) => {
     if (!msg.fileUrl) return;
+    const msgId = msg.id || msg._id;
+    if (downloadingItems[msgId]) return;
+
     const url = getMediaUrl(msg.fileUrl);
     const filename = msg.fileName || url.split('/').pop();
-    const fileUri = `${FileSystem.documentDirectory}${filename}`;
+    const dir = `${FileSystem.documentDirectory}Arcadia_ERP/`;
+    const fileUri = `${dir}${filename}`;
     
     try {
-      setSending(true); // This shows a loader on the UI
       const info = await FileSystem.getInfoAsync(fileUri);
       
       if (info.exists) {
+        setLocalFiles(prev => ({ ...prev, [filename]: true }));
+        if (Platform.OS === 'android') {
+          try {
+            const contentUri = await FileSystem.getContentUriAsync(fileUri);
+            await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+              data: contentUri,
+              flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
+              type: msg.mimeType || getMimeType(filename),
+            });
+          } catch (e) {
+            console.error('Intent Error:', e);
+            Alert.alert('Error', 'No app found to open this file type');
+          }
+          return;
+        }
+
         if (await Sharing.isAvailableAsync()) {
-          await Sharing.shareAsync(fileUri, { UTI: 'public.item', mimeType: msg.mimeType });
-        } else {
-          Alert.alert('Info', 'File already exists');
+          if (sending) return;
+          setSending(true);
+          try {
+            await Sharing.shareAsync(fileUri, { 
+              dialogTitle: `Open ${filename}`,
+              UTI: 'public.item', 
+              mimeType: msg.mimeType || getMimeType(filename)
+            });
+          } catch (e) {
+            console.error('Open Error:', e);
+          } finally {
+            setSending(false);
+          }
         }
         return;
       }
 
-      const downloadRes = await FileSystem.downloadAsync(url, fileUri);
+      setDownloadingItems(prev => ({ ...prev, [msgId]: 0 }));
       
-      // After download, auto-open it
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(downloadRes.uri, { UTI: 'public.item', mimeType: msg.mimeType });
-      } else {
-        Alert.alert('Success', 'File downloaded');
+      const downloadResumable = FileSystem.createDownloadResumable(
+        url,
+        fileUri,
+        {},
+        (progress) => {
+          const p = progress.totalBytesWritten / progress.totalBytesExpectedToWrite;
+          setDownloadingItems(prev => ({ ...prev, [msgId]: p }));
+        }
+      );
+
+      const downloadRes = await downloadResumable.downloadAsync();
+      
+      setDownloadingItems(prev => {
+        const next = { ...prev };
+        delete next[msgId];
+        return next;
+      });
+      setLocalFiles(prev => ({ ...prev, [filename]: true }));
+
+      if (Platform.OS === 'android') {
+        const contentUri = await FileSystem.getContentUriAsync(downloadRes.uri);
+        await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+          data: contentUri,
+          flags: 1,
+          type: msg.mimeType || getMimeType(filename),
+        });
+      } else if (await Sharing.isAvailableAsync()) {
+        setSending(true);
+        try {
+          await Sharing.shareAsync(downloadRes.uri, { 
+            dialogTitle: `Open ${filename}`,
+            UTI: 'public.item', 
+            mimeType: msg.mimeType || getMimeType(filename)
+          });
+        } catch (e) {
+          console.error('Share after download error:', e);
+        } finally {
+          setSending(false);
+        }
       }
     } catch (err) {
       console.error('Download error:', err);
+      setDownloadingItems(prev => {
+        const next = { ...prev };
+        delete next[msgId];
+        return next;
+      });
       Alert.alert('Error', 'Unable to download or open file');
-    } finally {
-      setSending(false);
     }
   };
 
@@ -639,9 +768,13 @@ export default function ChatScreen() {
         onVoucherAction={sendVoucherAction}
         onTaskAction={onTaskAction}
         onDownload={handleDownloadFile}
+        userRole={user?.role}
+        setSelectedVoucher={setSelectedVoucher}
+        progress={downloadingItems[item.id || item._id]}
+        isDownloaded={localFiles[item.fileName || item.fileUrl?.split('/').pop()]}
       />
     );
-  }, [myId, currentChat, Colors, selectedIds, handleLongPress, handlePress, handleImagePress, sendVoucherAction, onTaskAction, handleDownloadFile]);
+  }, [myId, currentChat, Colors, selectedIds, handleLongPress, handlePress, handleImagePress, sendVoucherAction, onTaskAction, handleDownloadFile, downloadingItems, localFiles]);
 
   const chatBody = useMemo(() => (
     <>
@@ -664,7 +797,7 @@ export default function ChatScreen() {
         <View style={[s.attachMenu, { backgroundColor: Colors.bgSecondary }]}>
           <TouchableOpacity style={s.attachItem} onPress={() => pickImage(false)}><View style={[s.attachIcon, { backgroundColor: '#A866EE' }]}><Ionicons name="image" size={24} color="#FFF" /></View><Text style={{ color: Colors.textPrimary }}>Gallery</Text></TouchableOpacity>
           <TouchableOpacity style={s.attachItem} onPress={() => pickImage(true)}><View style={[s.attachIcon, { backgroundColor: '#FF5722' }]}><Ionicons name="camera" size={24} color="#FFF" /></View><Text style={{ color: Colors.textPrimary }}>Camera</Text></TouchableOpacity>
-          <TouchableOpacity style={s.attachItem} onPress={async () => { const r = await DocumentPicker.getDocumentAsync(); if (!r.canceled) { const up = await fileAPI.uploadFile(r.assets[0].uri, r.assets[0].name, r.assets[0].mimeType); handleSend(up.data.data.fileName, 'FILE', up.data.data); } setShowAttachments(false); }}><View style={[s.attachIcon, { backgroundColor: '#1C98F7' }]}><Ionicons name="document" size={24} color="#FFF" /></View><Text style={{ color: Colors.textPrimary }}>Document</Text></TouchableOpacity>
+          <TouchableOpacity style={s.attachItem} onPress={async () => { const r = await DocumentPicker.getDocumentAsync(); if (!r.canceled) { const originalName = r.assets[0].name; const up = await fileAPI.uploadFile(r.assets[0].uri, originalName, r.assets[0].mimeType); handleSend(originalName, 'FILE', { ...up.data.data, fileName: originalName }); } setShowAttachments(false); }}><View style={[s.attachIcon, { backgroundColor: '#1C98F7' }]}><Ionicons name="document" size={24} color="#FFF" /></View><Text style={{ color: Colors.textPrimary }}>Document</Text></TouchableOpacity>
           <TouchableOpacity style={s.attachItem} onPress={() => { setShowAttachments(false); setVoucherVisible(true); }}><View style={[s.attachIcon, { backgroundColor: '#FF9800' }]}><Ionicons name="receipt" size={24} color="#FFF" /></View><Text style={{ color: Colors.textPrimary }}>Voucher</Text></TouchableOpacity>
           <TouchableOpacity style={s.attachItem} onPress={() => { setShowAttachments(false); setTaskModalVisible(true); }}><View style={[s.attachIcon, { backgroundColor: '#E91E63' }]}><Ionicons name="alarm" size={24} color="#FFF" /></View><Text style={{ color: Colors.textPrimary }}>Task</Text></TouchableOpacity>
         </View>
@@ -712,19 +845,11 @@ export default function ChatScreen() {
             <TouchableOpacity onPress={() => router.back()} style={s.backBtn}><Ionicons name="arrow-back" size={24} color={Colors.textPrimary} /></TouchableOpacity>
             <TouchableOpacity style={s.headerContent} onPress={() => router.push(`/chat/info/${chatId}`)}>
               <View style={[s.headerAvatar, { backgroundColor: Colors.primaryLight }]}>
-                {currentChat?.isGroup ? (
-                  currentChat?.avatarUrl ? <Image source={{ uri: getMediaUrl(currentChat.avatarUrl) }} style={{ width: '100%', height: '100%', borderRadius: 20 }} /> : <Ionicons name="people" size={20} color={Colors.textOnPrimary} />
-                ) : (
-                  (() => {
-                    const otherM = currentChat?.members?.find(m => (m.user?.id || m.user?._id) !== myId);
-                    const av = otherM?.user?.avatarUrl;
-                    return av ? (
-                      <Image source={{ uri: getMediaUrl(av) }} style={{ width: '100%', height: '100%', borderRadius: 20 }} />
-                    ) : (
-                      <Text style={{ color: Colors.textOnPrimary }}>{currentChat?.name?.[0]}</Text>
-                    );
-                  })()
-                )}
+                {(() => {
+                  const otherM = currentChat?.members?.find(m => (m.user?.id || m.user?._id) !== myId);
+                  const avUrl = getAvatarUrl(currentChat, otherM?.user);
+                  return <Image source={{ uri: avUrl }} style={{ width: '100%', height: '100%', borderRadius: 20 }} />;
+                })()}
               </View>
               <View style={s.headerInfo}>
                 <Text style={[s.headerName, { color: Colors.textPrimary }]} numberOfLines={1}>{currentChat?.name}</Text>

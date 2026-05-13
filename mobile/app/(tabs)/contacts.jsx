@@ -45,7 +45,9 @@ export default function ContactsScreen() {
         keyExtractor={i => i.id || i._id}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={onRefresh} tintColor={Colors.accent} colors={[Colors.accent]} />}
         renderItem={({ item }) => {
-          const avatarUrl = item.avatarUrl ? (item.avatarUrl.startsWith('http') ? item.avatarUrl : `${API_BASE_URL}/${item.avatarUrl.replace(/^\//, '')}`) : null;
+          const avatarUrl = item.avatarUrl 
+            ? (item.avatarUrl.startsWith('http') ? item.avatarUrl : `${API_BASE_URL}/${item.avatarUrl.replace(/^\//, '')}`) 
+            : `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || 'User')}&background=random&color=fff`;
           return (
             <TouchableOpacity style={[s.userItem, { borderBottomColor: Colors.divider }]} onPress={() => handleStartChat(item.id || item._id)} activeOpacity={0.7}>
               <View style={[s.avatar, { backgroundColor: Colors.primaryLight }]}>
