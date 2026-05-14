@@ -187,7 +187,7 @@ export default function SettingsScreen() {
               />
             }
           />
-          <SettingItem icon="lock-closed-outline" label="Privacy" sublabel="Blocked contacts" onPress={() => {}} />
+          <SettingItem icon="receipt-outline" label="My Vouchers" sublabel="Vouchers created by you" onPress={() => router.push('/my-vouchers')} />
           <SettingItem icon="chatbubble-outline" label="Chats" sublabel="Theme, wallpapers" onPress={() => {}} />
         </View>
 

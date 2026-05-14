@@ -71,6 +71,8 @@ const messageAPI = {
   deleteMessage: (id) => api.delete(`/messages/${id}`),
   forwardMessage: (messageId, targetChatId) => api.post('/messages/forward', { messageId, targetChatId }),
   getMessageForForward: (id) => api.get(`/messages/forward/${id}`),
+  getSharedDocuments: () => api.get('/messages/shared/documents'),
+  getMyVouchers: () => api.get('/messages/my/vouchers'),
 };
 
 export const fleetAPI = {
@@ -79,6 +81,7 @@ export const fleetAPI = {
   deleteFile: (id) => api.delete(`/fleet/${id}`),
   processFile: (id) => api.post(`/fleet/process/${id}`),
   getAssets: () => api.get('/fleet/assets'),
+  updateAsset: (id, data) => api.put(`/fleet/assets/${id}`, data),
 };
 
 // File APIs

@@ -10,7 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { useChatStore } from '../../store/chatStore';
 import { useAuthStore } from '../../store/authStore';
@@ -19,7 +19,8 @@ import { fileAPI } from '../../lib/api';
 import { useTheme, Fonts, Spacing, BorderRadius } from '@/constants/appTheme';
 import { API_BASE_URL } from '@/constants/config';
 import { format, differenceInSeconds, isValid } from 'date-fns';
-import { Audio } from 'expo-av';
+// Audio migration pending expo-audio install
+// import { Audio } from 'expo-av';
 import VoucherModal from '../../components/VoucherModal';
 import VoucherDetailModal from '../../components/VoucherDetailModal';
 import TaskModal from '../../components/TaskModal';
@@ -470,11 +471,15 @@ export default function ChatScreen() {
       vibrationIntervalRef.current = setInterval(() => {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }, 1500);
+      
+      // Migrating to expo-audio for SDK 54 compatibility
+      /* 
       const { sound } = await Audio.Sound.createAsync(
         require('../../assets/images/favicon.png'),
         { shouldPlay: true, isLooping: true }
       );
       soundRef.current = sound;
+      */
     } catch (err) {
       console.log('Audio init skipped or failed:', err.message);
     }

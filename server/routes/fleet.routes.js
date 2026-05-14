@@ -94,6 +94,37 @@ router.delete('/:id', authenticate, async (req, res) => {
   }
 });
 
+// @route   PUT /api/fleet/assets/:id
+// @desc    Update asset location and remark
+// @access  Private
+router.put('/assets/:id', authenticate, async (req, res) => {
+  try {
+    const { location, remark, status } = req.body;
+    const asset = await Asset.findById(req.params.id);
+    
+    if (!asset) {
+      return res.status(404).json({ success: false, message: 'Asset not found' });
+    }
+
+    // User can only change location and remark
+    if (location !== undefined) asset.location = location;
+    if (remark !== undefined) asset.remark = remark;
+    if (status !== undefined) asset.status = status;
+    
+    asset.lastUpdatedBy = req.user.id;
+    asset.updatedAt = new Date();
+    
+    await asset.save();
+    
+    const populatedAsset = await Asset.findById(asset._id).populate('lastUpdatedBy', 'name email');
+    
+    res.json({ success: true, data: { asset: populatedAsset } });
+  } catch (error) {
+    console.error('Update asset error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
 // @route   POST /api/fleet/process/:id
 // @desc    Process a fleet file and update assets
 // @access  Private
@@ -104,8 +135,6 @@ router.post('/process/:id', authenticate, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Fleet file not found' });
     }
 
-    // Convert relative URL to absolute path
-    // Assuming fileUrl is like /uploads/filename.xlsx
     const relativePath = fleetFile.fileUrl.startsWith('/') ? fleetFile.fileUrl.substring(1) : fleetFile.fileUrl;
     const filePath = path.join(process.cwd(), relativePath);
 
@@ -122,21 +151,24 @@ router.post('/process/:id', authenticate, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Excel file is empty or invalid format' });
     }
 
-    // Row 0 is the header names as interpreted by xlsx (SR NO, CLASSIFICATION, etc.)
-    // But as we saw, Row 0 might be data if headers are not correctly recognized.
-    // Based on our analysis, the first object in 'data' is the human-readable header names.
-    // So actual data starts from index 1.
     const rows = data.slice(1); 
-
     const results = { updated: 0, created: 0, errors: 0 };
 
     for (const row of rows) {
       const assetName = row['__EMPTY_1']?.trim();
       if (!assetName) continue;
 
+      const classificationRaw = String(row['__EMPTY'] || '').toUpperCase();
+      const irsIvRaw = String(row['__EMPTY_7'] || '').toUpperCase();
+      
+      // Determine refined classification based on IRS/IV types
+      let refinedClassification = classificationRaw;
+      if (irsIvRaw.includes('IRS')) refinedClassification = 'IRS';
+      else if (irsIvRaw.includes('IV')) refinedClassification = 'IV';
+
       const assetData = {
         srNo: typeof row['EQUIPMENT LIST'] === 'number' ? row['EQUIPMENT LIST'] : undefined,
-        classification: row['__EMPTY'],
+        classification: refinedClassification,
         name: assetName,
         regNo: row['__EMPTY_2'],
         buildYear: typeof row['__EMPTY_3'] === 'number' ? row['__EMPTY_3'] : undefined,
@@ -151,12 +183,13 @@ router.post('/process/:id', authenticate, async (req, res) => {
       };
 
       try {
-        // Find by name (case-insensitive)
         const existing = await Asset.findOne({ 
           name: { $regex: new RegExp(`^${assetData.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } 
         });
 
         if (existing) {
+          // If updating from Excel, we don't necessarily want to overwrite manual location/remark if they were just changed
+          // but for initial sync it's fine.
           await Asset.findByIdAndUpdate(existing._id, assetData);
           results.updated++;
         } else {

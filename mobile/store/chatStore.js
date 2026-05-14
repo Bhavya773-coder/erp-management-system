@@ -13,6 +13,10 @@ export const useChatStore = create((set, get) => ({
   error: null,
   typingUsers: {},
 
+  // ─── Cache Management ───────────────────────────────────────────────────
+  messagesByChat: {}, // Cache: { [chatId]: Message[] }
+  chatPagination: {}, // Cache: { [chatId]: { page: number, hasMore: boolean } }
+
   // ─── Chat Actions ───────────────────────────────────────────────────────
   setChats: (chats) => set({ chats }),
 
@@ -32,35 +36,74 @@ export const useChatStore = create((set, get) => ({
   setCurrentChat: (chat) => {
     set({ currentChat: chat });
     if (chat) {
+      // Clear unread count locally
       set((state) => ({
         chats: state.chats.map((c) =>
           c.id === chat.id ? { ...c, unreadCount: 0 } : c
         ),
       }));
+
+      // Instant UI Update from Cache
+      const cachedMessages = get().messagesByChat[chat.id] || [];
+      const cachedPagination = get().chatPagination[chat.id] || { page: 1, hasMore: true };
+      
+      set({ 
+        messages: cachedMessages,
+        page: cachedPagination.page,
+        hasMore: cachedPagination.hasMore
+      });
     }
   },
 
+  lastFetchId: null,
+
   fetchChat: async (chatId) => {
+    const fetchId = Date.now().toString() + Math.random().toString();
+    set({ lastFetchId: fetchId });
+
+    // 1. Instant switch if in cache
+    const cachedMessages = get().messagesByChat[chatId];
+    if (cachedMessages) {
+      const cachedPagination = get().chatPagination[chatId] || { page: 1, hasMore: true };
+      set({ 
+        messages: cachedMessages,
+        page: cachedPagination.page,
+        hasMore: cachedPagination.hasMore,
+        isLoading: false // Don't show full-screen loader if we have data
+      });
+    } else {
+      set({ isLoading: true, messages: [], error: null });
+    }
+
     try {
-      const isSameChat = get().currentChat?.id === chatId;
-      if (!isSameChat) {
-        set({ isLoading: true, messages: [], error: null });
-      }
-      
-      const response = await chatAPI.getChat(chatId);
-      const msgRes = await messageAPI.getMessages(chatId, { page: 1, limit: 20 });
-      set({
-        currentChat: response.data.data.chat,
-        messages: msgRes.data.data.messages || [],
-        hasMore: msgRes.data.data.messages.length >= 20,
+      const [response, msgRes] = await Promise.all([
+        chatAPI.getChat(chatId),
+        messageAPI.getMessages(chatId, { page: 1, limit: 20 })
+      ]);
+
+      if (get().lastFetchId !== fetchId) return;
+
+      const newMessages = msgRes.data.data.messages || [];
+      const newChat = response.data.data.chat;
+      const pagination = { page: 1, hasMore: newMessages.length >= 20 };
+
+      // Update both global state and cache
+      set((state) => ({
+        currentChat: newChat,
+        messages: newMessages,
+        hasMore: pagination.hasMore,
         page: 1,
         isLoading: false,
-      });
+        messagesByChat: { ...state.messagesByChat, [chatId]: newMessages },
+        chatPagination: { ...state.chatPagination, [chatId]: pagination }
+      }));
     } catch (error) {
-      set({
-        error: error.response?.data?.message || 'Failed to fetch chat',
-        isLoading: false,
-      });
+      if (get().lastFetchId === fetchId) {
+        set({
+          error: error.response?.data?.message || 'Failed to fetch chat',
+          isLoading: false,
+        });
+      }
     }
   },
 
@@ -114,46 +157,75 @@ export const useChatStore = create((set, get) => ({
   },
 
   deleteChatLocal: (chatId) => {
-    set((state) => ({
-      chats: state.chats.filter((c) => c.id !== chatId),
-      currentChat: state.currentChat?.id === chatId ? null : state.currentChat,
-      messages: state.currentChat?.id === chatId ? [] : state.messages,
-    }));
+    set((state) => {
+      const { [chatId]: _, ...remainingMessages } = state.messagesByChat;
+      const { [chatId]: __, ...remainingPagination } = state.chatPagination;
+      return {
+        chats: state.chats.filter((c) => c.id !== chatId),
+        currentChat: state.currentChat?.id === chatId ? null : state.currentChat,
+        messages: state.currentChat?.id === chatId ? [] : state.messages,
+        messagesByChat: remainingMessages,
+        chatPagination: remainingPagination
+      };
+    });
   },
 
   // ─── Message Actions ──────────────────────────────────────────────────
-  setMessages: (messages) => set({ messages }),
+  setMessages: (messages) => {
+    const chatId = get().currentChat?.id;
+    if (chatId) {
+      set((state) => ({
+        messages,
+        messagesByChat: { ...state.messagesByChat, [chatId]: messages }
+      }));
+    } else {
+      set({ messages });
+    }
+  },
 
   fetchMessages: async (chatId, page = 1) => {
     try {
       const response = await messageAPI.getMessages(chatId, { page, limit: 20 });
       const newMessages = response.data.data.messages;
-      set((state) => ({
-        messages: page === 1 ? newMessages : [...newMessages, ...state.messages],
-        hasMore: newMessages.length >= 20,
-        page,
-      }));
+      const pagination = { page, hasMore: newMessages.length >= 20 };
+
+      set((state) => {
+        const updatedMessages = page === 1 ? newMessages : [...newMessages, ...(state.messagesByChat[chatId] || [])];
+        return {
+          messages: state.currentChat?.id === chatId ? updatedMessages : state.messages,
+          hasMore: state.currentChat?.id === chatId ? pagination.hasMore : state.hasMore,
+          page: state.currentChat?.id === chatId ? page : state.page,
+          messagesByChat: { ...state.messagesByChat, [chatId]: updatedMessages },
+          chatPagination: { ...state.chatPagination, [chatId]: pagination }
+        };
+      });
     } catch (error) {
       console.error('Failed to fetch messages:', error);
     }
   },
 
   loadMoreMessages: async (chatId) => {
-    const { page, hasMore, isLoading } = get();
-    if (!hasMore || isLoading) return;
+    const chatState = get().chatPagination[chatId] || { page: 1, hasMore: true };
+    if (!chatState.hasMore || get().isLoading) return;
     
     set({ isLoading: true });
     try {
-      const nextPage = page + 1;
+      const nextPage = chatState.page + 1;
       const response = await messageAPI.getMessages(chatId, { page: nextPage, limit: 20 });
       const newMessages = response.data.data.messages;
+      const pagination = { page: nextPage, hasMore: newMessages.length >= 20 };
       
-      set((state) => ({
-        messages: [...newMessages, ...state.messages],
-        hasMore: newMessages.length >= 20,
-        page: nextPage,
-        isLoading: false,
-      }));
+      set((state) => {
+        const updatedMessages = [...newMessages, ...(state.messagesByChat[chatId] || [])];
+        return {
+          messages: state.currentChat?.id === chatId ? updatedMessages : state.messages,
+          hasMore: state.currentChat?.id === chatId ? pagination.hasMore : state.hasMore,
+          page: state.currentChat?.id === chatId ? nextPage : state.page,
+          isLoading: false,
+          messagesByChat: { ...state.messagesByChat, [chatId]: updatedMessages },
+          chatPagination: { ...state.chatPagination, [chatId]: pagination }
+        };
+      });
     } catch (error) {
       console.error('Load more messages error:', error);
       set({ isLoading: false });
@@ -211,56 +283,55 @@ export const useChatStore = create((set, get) => ({
   },
 
   addMessage: (message) => {
-    console.log('📩 addMessage called for chatId:', message.chatId);
     set((state) => {
-      // 1. Avoid duplicates
-      if (state.messages.some((m) => m.id === message.id)) return state;
-
-      // 2. Handle temp messages (sent from this device)
-      const tempId = message.tempId || message.id;
-      const tempIndex = state.messages.findIndex(m => m.id === tempId || m.tempId === tempId);
+      const chatId = message.chatId;
+      const currentCache = state.messagesByChat[chatId] || [];
       
-      let newMessages = [...state.messages];
+      // 1. Avoid duplicates
+      if (currentCache.some((m) => m.id === message.id)) return state;
+
+      // 2. Handle temp messages
+      const tempId = message.tempId || message.id;
+      const tempIndex = currentCache.findIndex(m => m.id === tempId || m.tempId === tempId);
+      
+      let updatedCache = [...currentCache];
       if (tempIndex !== -1) {
-        newMessages[tempIndex] = message;
+        updatedCache[tempIndex] = message;
       } else {
-        newMessages.push(message);
+        updatedCache.push(message);
       }
 
       // 3. Update Chat List
       const myId = useAuthStore.getState().user?.id || useAuthStore.getState().user?._id;
-      const chatIndex = state.chats.findIndex((c) => c.id === message.chatId);
+      const chatIndex = state.chats.findIndex((c) => c.id === chatId);
       
-      if (chatIndex === -1) {
-        console.log('🆕 New chat detected, fetching chats...');
+      const updatedChats = [...state.chats];
+      if (chatIndex !== -1) {
+        const chat = updatedChats[chatIndex];
+        const isCurrentChat = state.currentChat?.id === chatId;
+        const isFromMe = (message.sender?.id || message.sender?._id || message.sender) === myId;
+
+        updatedChats[chatIndex] = {
+          ...chat,
+          lastMessage: message,
+          updatedAt: message.createdAt,
+          unreadCount: (!isCurrentChat && !isFromMe) 
+            ? (Number(chat.unreadCount) || 0) + 1 
+            : (isCurrentChat ? 0 : chat.unreadCount)
+        };
+
+        updatedChats.sort((a, b) => {
+          const aTime = new Date(a.updatedAt || a.lastMessage?.createdAt || 0);
+          const bTime = new Date(b.updatedAt || b.lastMessage?.createdAt || 0);
+          return bTime - aTime;
+        });
+      } else {
         get().fetchChats();
-        return { messages: newMessages };
       }
 
-      const updatedChats = [...state.chats];
-      const chat = updatedChats[chatIndex];
-      const isCurrentChat = state.currentChat?.id === message.chatId;
-      const isFromMe = (message.sender?.id || message.sender?._id || message.sender) === myId;
-
-      updatedChats[chatIndex] = {
-        ...chat,
-        lastMessage: message,
-        updatedAt: message.createdAt,
-        unreadCount: (!isCurrentChat && !isFromMe) 
-          ? (Number(chat.unreadCount) || 0) + 1 
-          : (isCurrentChat ? 0 : chat.unreadCount)
-      };
-
-      // 4. Sort chats by activity
-      updatedChats.sort((a, b) => {
-        const aTime = new Date(a.updatedAt || a.lastMessage?.createdAt || 0);
-        const bTime = new Date(b.updatedAt || b.lastMessage?.createdAt || 0);
-        return bTime - aTime;
-      });
-
-      console.log(`✅ Updated counter for chat ${message.chatId}. New unread: ${updatedChats[chatIndex].unreadCount}`);
       return { 
-        messages: newMessages, 
+        messages: state.currentChat?.id === chatId ? updatedCache : state.messages,
+        messagesByChat: { ...state.messagesByChat, [chatId]: updatedCache },
         chats: updatedChats 
       };
     });
@@ -268,7 +339,7 @@ export const useChatStore = create((set, get) => ({
 
   updateMessage: (chatId, messageId, updates) => {
     set((state) => {
-      const updateObj = (m) => {
+      const updateMsg = (m) => {
         const newM = { ...m };
         Object.keys(updates).forEach(key => {
           if (key.includes('.')) {
@@ -283,11 +354,16 @@ export const useChatStore = create((set, get) => ({
         return newM;
       };
 
+      const updatedCache = (state.messagesByChat[chatId] || []).map(m => 
+        (m.id === messageId || m._id === messageId) ? updateMsg(m) : m
+      );
+
       return {
-        messages: state.messages.map((m) => (m.id === messageId || m._id === messageId) ? updateObj(m) : m),
+        messages: state.currentChat?.id === chatId ? updatedCache : state.messages,
+        messagesByChat: { ...state.messagesByChat, [chatId]: updatedCache },
         chats: state.chats.map((chat) => {
           if (chat.id === chatId && (chat.lastMessage?.id === messageId || chat.lastMessage?._id === messageId)) {
-            return { ...chat, lastMessage: updateObj(chat.lastMessage) };
+            return { ...chat, lastMessage: updateMsg(chat.lastMessage) };
           }
           return chat;
         }),
@@ -296,66 +372,58 @@ export const useChatStore = create((set, get) => ({
   },
 
   deleteMessage: (chatId, messageId) => {
-    set((state) => ({
-      messages: state.messages.map((m) =>
-        m.id === messageId
-          ? {
-              ...m,
-              isDeleted: true,
-              content: 'This message was deleted',
-              fileUrl: null,
-              fileName: null,
-            }
-          : m
-      ),
-      chats: state.chats.map((chat) => {
-        if (chat.id === chatId && chat.lastMessage?.id === messageId) {
-          return {
-            ...chat,
-            lastMessage: {
-              ...chat.lastMessage,
-              isDeleted: true,
-              content: 'This message was deleted',
-            },
-          };
-        }
-        return chat;
-      }),
-    }));
+    set((state) => {
+      const deleter = (m) => (m.id === messageId) ? {
+        ...m,
+        isDeleted: true,
+        content: 'This message was deleted',
+        fileUrl: null,
+        fileName: null,
+      } : m;
+
+      const updatedCache = (state.messagesByChat[chatId] || []).map(deleter);
+
+      return {
+        messages: state.currentChat?.id === chatId ? updatedCache : state.messages,
+        messagesByChat: { ...state.messagesByChat, [chatId]: updatedCache },
+        chats: state.chats.map((chat) => {
+          if (chat.id === chatId && chat.lastMessage?.id === messageId) {
+            return { ...chat, lastMessage: deleter(chat.lastMessage) };
+          }
+          return chat;
+        }),
+      };
+    });
   },
 
   updateMessageStatus: (chatId, status, messageId = null) => {
-    set((state) => ({
-      messages: state.messages.map((m) => {
+    set((state) => {
+      const myId = useAuthStore.getState().user?.id || useAuthStore.getState().user?._id;
+      const statusUpdater = (m) => {
         if (m.chatId === chatId) {
-          if (messageId && m.id === messageId) {
-            return { ...m, status };
-          } else if (
-            !messageId &&
-            m.senderId ===
-              (useAuthStore.getState().user?.id ||
-                useAuthStore.getState().user?._id)
-          ) {
-            return { ...m, status };
-          }
+          if (messageId && (m.id === messageId || m._id === messageId)) return { ...m, status };
+          if (!messageId && (m.senderId === myId || m.sender === myId || m.sender?.id === myId)) return { ...m, status };
         }
         return m;
-      }),
-      chats: state.chats.map((chat) => {
-        if (
-          chat.id === chatId &&
-          chat.lastMessage &&
-          (messageId === chat.lastMessage.id || !messageId)
-        ) {
-          return {
-            ...chat,
-            lastMessage: { ...chat.lastMessage, status },
-            unreadCount: status === 'SEEN' ? 0 : chat.unreadCount,
-          };
-        }
-        return chat;
-      }),
-    }));
+      };
+
+      const updatedCache = (state.messagesByChat[chatId] || []).map(statusUpdater);
+
+      return {
+        messages: state.currentChat?.id === chatId ? updatedCache : state.messages,
+        messagesByChat: { ...state.messagesByChat, [chatId]: updatedCache },
+        chats: state.chats.map((chat) => {
+          if (chat.id === chatId && chat.lastMessage && (messageId === chat.lastMessage.id || !messageId)) {
+            return {
+              ...chat,
+              lastMessage: statusUpdater(chat.lastMessage),
+              unreadCount: status === 'SEEN' ? 0 : chat.unreadCount,
+            };
+          }
+          return chat;
+        }),
+      };
+    });
   },
 
   // ─── Typing Indicator ─────────────────────────────────────────────────
@@ -448,28 +516,16 @@ export const useChatStore = create((set, get) => ({
 
   registerPushNotifications: async () => {
     try {
-      console.log('🔔 Registering for push notifications...');
       const { status: existingStatus } = await Notifications.getPermissionsAsync();
       let finalStatus = existingStatus;
       if (existingStatus !== 'granted') {
         const { status } = await Notifications.requestPermissionsAsync();
         finalStatus = status;
       }
-      if (finalStatus !== 'granted') {
-        console.log('❌ Failed to get push token for push notification!');
-        return;
-      }
+      if (finalStatus !== 'granted') return;
 
-      const projectId = Constants?.expoConfig?.extra?.eas?.projectId;
-      console.log('Project ID for notifications:', projectId);
-
-      const pushTokenData = await Notifications.getExpoPushTokenAsync({
-        ...(projectId ? { projectId } : {}),
-      });
-      const expoPushToken = pushTokenData.data;
-      console.log('✅ Registered Expo Push Token:', expoPushToken);
-      
-      await authAPI.registerExpoPushToken(expoPushToken);
+      const pushTokenData = await Notifications.getExpoPushTokenAsync();
+      await authAPI.registerExpoPushToken(pushTokenData.data);
     } catch (error) {
       console.error('❌ Error registering for push notifications:', error);
     }

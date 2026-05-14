@@ -137,6 +137,27 @@ router.get('/shared/documents', authenticate, async (req, res) => {
   }
 });
 
+// @route   GET /api/messages/my/vouchers
+// @desc    Get all VOUCHER messages created by the current user
+// @access  Private
+router.get('/my/vouchers', authenticate, async (req, res) => {
+  try {
+    const vouchers = await Message.find({
+      sender: req.user._id,
+      messageType: 'VOUCHER',
+      isDeleted: false
+    })
+      .populate('chat', 'name isGroup')
+      .sort({ createdAt: -1 })
+      .limit(50);
+
+    res.json({ success: true, data: { vouchers } });
+  } catch (error) {
+    console.error('Get my vouchers error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
 // @route   GET /api/messages/:chatId
 // @desc    Get messages for a chat
 // @access  Private

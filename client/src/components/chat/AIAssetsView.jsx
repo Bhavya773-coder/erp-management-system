@@ -4,6 +4,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { 
   ArrowLeft,
   Search,
   RefreshCw,
@@ -14,14 +22,24 @@ import {
   LayoutDashboard,
   Filter,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Edit2,
+  MapPin,
+  Clock,
+  User as UserIcon
 } from 'lucide-react';
+import { format } from 'date-fns';
 
 export default function AIAssetsView({ onBack }) {
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState('ALL'); // 'ALL', 'BARGE', 'TUG'
+  const [filterType, setFilterType] = useState('ALL'); // 'ALL', 'IV', 'IRS', 'ON_HIRE'
+  
+  // Edit State
+  const [editingAsset, setEditingAsset] = useState(null);
+  const [editForm, setEditForm] = useState({ location: '', remark: '', status: '' });
+  const [isUpdating, setIsUpdating] = useState(false);
 
   useEffect(() => {
     fetchAssets();
@@ -41,18 +59,50 @@ export default function AIAssetsView({ onBack }) {
     }
   };
 
+  const handleEditClick = (asset) => {
+    setEditingAsset(asset);
+    setEditForm({
+      location: asset.location || '',
+      remark: asset.remark || '',
+      status: asset.status || 'IDLE'
+    });
+  };
+
+  const handleUpdate = async () => {
+    if (!editingAsset) return;
+    setIsUpdating(true);
+    try {
+      const response = await fleetAPI.updateAsset(editingAsset._id, editForm);
+      if (response.data.success) {
+        const updatedAsset = response.data.data.asset;
+        setAssets(assets.map(a => a._id === updatedAsset._id ? updatedAsset : a));
+        setEditingAsset(null);
+      }
+    } catch (error) {
+      console.error('Failed to update asset:', error);
+      alert('Update failed');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const filteredAssets = assets.filter(asset => {
     const matchesSearch = 
       asset.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       asset.regNo?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFilter = filterType === 'ALL' || asset.classification === filterType;
+    
+    let matchesFilter = true;
+    if (filterType === 'IV') matchesFilter = asset.classification === 'IV';
+    else if (filterType === 'IRS') matchesFilter = asset.classification === 'IRS';
+    else if (filterType === 'ON_HIRE') matchesFilter = asset.status === 'ON_HIRE';
+    
     return matchesSearch && matchesFilter;
   });
 
   const stats = {
     total: assets.length,
-    barges: assets.filter(a => a.classification === 'BARGE').length,
-    tugs: assets.filter(a => a.classification === 'TUG').length,
+    iv: assets.filter(a => a.classification === 'IV').length,
+    irs: assets.filter(a => a.classification === 'IRS').length,
     onHire: assets.filter(a => a.status === 'ON_HIRE').length
   };
 
@@ -75,9 +125,9 @@ export default function AIAssetsView({ onBack }) {
                 <div className="p-2 bg-[#E5A24A] rounded-lg shadow-lg shadow-[#E5A24A]/20">
                   <LayoutDashboard className="w-6 h-6 text-[#0E1417]" />
                 </div>
-                <h1 className="text-2xl font-bold tracking-tight font-manrope">AI ASSET INTELLIGENCE</h1>
+                <h1 className="text-2xl font-bold tracking-tight font-manrope uppercase">Fleet Intelligence</h1>
               </div>
-              <p className="text-[#9E8E7E] text-xs font-medium uppercase tracking-widest">Autonomous Fleet Monitoring System</p>
+              <p className="text-[#9E8E7E] text-xs font-medium uppercase tracking-widest">Real-time Asset Monitoring & Deployment</p>
             </div>
           </div>
 
@@ -114,14 +164,14 @@ export default function AIAssetsView({ onBack }) {
             color="primary"
           />
           <MetricCard 
-            label="Barges" 
-            value={stats.barges} 
+            label="IV Assets" 
+            value={stats.iv} 
             icon={<Anchor className="w-5 h-5 text-[#B7C8E1]" />} 
             color="secondary"
           />
           <MetricCard 
-            label="Tugs" 
-            value={stats.tugs} 
+            label="IRS Assets" 
+            value={stats.irs} 
             icon={<Activity className="w-5 h-5 text-[#43E1CC]" />} 
             color="tertiary"
           />
@@ -136,10 +186,11 @@ export default function AIAssetsView({ onBack }) {
 
       {/* Filter Tabs */}
       <div className="px-6 pb-4">
-        <div className="max-w-6xl mx-auto flex items-center space-x-2">
+        <div className="max-w-6xl mx-auto flex items-center space-x-2 overflow-x-auto pb-2 sm:pb-0 no-scrollbar">
           <FilterTab active={filterType === 'ALL'} onClick={() => setFilterType('ALL')} label="ALL ASSETS" />
-          <FilterTab active={filterType === 'BARGE'} onClick={() => setFilterType('BARGE')} label="BARGES" />
-          <FilterTab active={filterType === 'TUG'} onClick={() => setFilterType('TUG')} label="TUGS" />
+          <FilterTab active={filterType === 'IV'} onClick={() => setFilterType('IV')} label="IV" />
+          <FilterTab active={filterType === 'IRS'} onClick={() => setFilterType('IRS')} label="IRS" />
+          <FilterTab active={filterType === 'ON_HIRE'} onClick={() => setFilterType('ON_HIRE')} label="ON HIRE" />
         </div>
       </div>
 
@@ -151,10 +202,9 @@ export default function AIAssetsView({ onBack }) {
               <thead>
                 <tr className="bg-[#090F12] text-[#9E8E7E] text-[10px] font-black tracking-[0.2em] uppercase">
                   <th className="px-6 py-4">Asset Details</th>
-                  <th className="px-6 py-4">Reg No / Year</th>
-                  <th className="px-6 py-4">Dimensions (m)</th>
+                  <th className="px-6 py-4">Location / Remarks</th>
                   <th className="px-6 py-4">Current Status</th>
-                  <th className="px-6 py-4 text-right">Last Sync</th>
+                  <th className="px-6 py-4 text-right">Audit Info</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#303639]">
@@ -162,7 +212,7 @@ export default function AIAssetsView({ onBack }) {
                   Array(5).fill(0).map((_, i) => <LoadingRow key={i} />)
                 ) : filteredAssets.length === 0 ? (
                   <tr>
-                    <td colSpan="5" className="px-6 py-20 text-center text-[#514537]">
+                    <td colSpan="4" className="px-6 py-20 text-center text-[#514537]">
                       <AlertCircle className="w-12 h-12 mx-auto mb-4 opacity-10" />
                       <p className="text-lg font-bold">No assets identified</p>
                       <p className="text-xs uppercase tracking-widest mt-1">Upload a Fleet Excel to initialize data</p>
@@ -173,29 +223,55 @@ export default function AIAssetsView({ onBack }) {
                     <tr key={asset._id} className="hover:bg-[#1A2024] transition-colors group">
                       <td className="px-6 py-4">
                         <div className="flex items-center space-x-3">
-                          <div className={`p-2 rounded-lg ${asset.classification === 'TUG' ? 'bg-[#00C5B1]/10 text-[#43E1CC]' : 'bg-[#E5A24A]/10 text-[#E5A24A]'}`}>
-                            {asset.classification === 'TUG' ? <Activity className="w-4 h-4" /> : <Ship className="w-4 h-4" />}
+                          <div className={`p-2 rounded-lg ${asset.classification === 'IRS' ? 'bg-[#00C5B1]/10 text-[#43E1CC]' : 'bg-[#E5A24A]/10 text-[#E5A24A]'}`}>
+                            {asset.classification === 'IRS' ? <Activity className="w-4 h-4" /> : <Ship className="w-4 h-4" />}
                           </div>
-                          <div>
-                            <p className="font-bold text-sm text-[#DEE3E7] uppercase">{asset.name || 'Unnamed Asset'}</p>
-                            <p className="text-[10px] text-[#9E8E7E] uppercase tracking-tighter">{asset.type || 'Standard'}</p>
+                          <div className="min-w-0">
+                            <p className="font-bold text-sm text-[#DEE3E7] uppercase truncate max-w-[200px]">{asset.name || 'Unnamed Asset'}</p>
+                            <div className="flex items-center space-x-2 text-[10px] text-[#9E8E7E] uppercase tracking-tighter">
+                              <span>{asset.classification}</span>
+                              <span className="opacity-20">•</span>
+                              <span>{asset.regNo || 'NO REG'}</span>
+                            </div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-xs font-medium">
-                        <p className="text-[#DEE3E7]">{asset.regNo || 'N/A'}</p>
-                        <p className="text-[#514537]">{asset.buildYear || 'Year Unknown'}</p>
-                      </td>
-                      <td className="px-6 py-4 text-xs font-mono text-[#B7C8E1]">
-                        {asset.length || '-'} x {asset.breadth || '-'} x {asset.depth || '-'}
+                      <td className="px-6 py-4">
+                        <div className="space-y-1">
+                          <div className="flex items-center space-x-1.5 text-xs">
+                            <MapPin className="w-3 h-3 text-[#E5A24A]" />
+                            <span className="text-[#DEE3E7] font-medium">{asset.location || 'Unknown'}</span>
+                          </div>
+                          {asset.remark && (
+                            <p className="text-[10px] text-[#9E8E7E] italic line-clamp-1">"{asset.remark}"</p>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4">
-                        <StatusChip status={asset.status} />
+                        <div className="flex items-center justify-between">
+                          <StatusChip status={asset.status} />
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 rounded-full hover:bg-[#E5A24A]/10 text-[#E5A24A] sm:opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => handleEditClick(asset)}
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <div className="flex flex-col items-end">
-                          <p className="text-[10px] text-[#9E8E7E] uppercase">{asset.location || 'Unknown Location'}</p>
-                          <p className="text-[9px] text-[#514537] italic font-mono">{new Date(asset.updatedAt).toLocaleTimeString()}</p>
+                        <div className="flex flex-col items-end space-y-0.5">
+                          {asset.lastUpdatedBy && (
+                            <div className="flex items-center space-x-1 text-[10px] text-[#B7C8E1] font-bold">
+                              <UserIcon className="w-2.5 h-2.5" />
+                              <span className="uppercase">{asset.lastUpdatedBy.name}</span>
+                            </div>
+                          )}
+                          <div className="flex items-center space-x-1 text-[9px] text-[#514537] italic font-mono">
+                            <Clock className="w-2 h-2" />
+                            <span>{format(new Date(asset.updatedAt), 'dd MMM, HH:mm')}</span>
+                          </div>
                         </div>
                       </td>
                     </tr>
@@ -204,22 +280,76 @@ export default function AIAssetsView({ onBack }) {
               </tbody>
             </table>
           </div>
-
-          {/* AI Log / History */}
-          <div className="mt-8">
-            <div className="flex items-center space-x-3 mb-4">
-              <History className="w-4 h-4 text-[#E5A24A]" />
-              <h3 className="text-xs font-black text-[#9E8E7E] tracking-[0.3em] uppercase">Processing Intel</h3>
-            </div>
-            <div className="bg-[#090F12] rounded-2xl p-6 border border-[#303639] font-mono text-[11px] leading-relaxed">
-              <p className="text-[#43E1CC] mb-1">[SYS] AI Engine version 2.4.0 active</p>
-              <p className="text-[#9E8E7E] mb-1">[LOG] Last sync completed at {new Date().toLocaleTimeString()}</p>
-              <p className="text-[#B7C8E1] mb-1">[INTEL] {stats.barges} Barges and {stats.tugs} Tugs verified against manifest</p>
-              <p className="text-[#E5A24A]">[READY] System monitoring real-time fleet state</p>
-            </div>
-          </div>
         </div>
       </ScrollArea>
+
+      {/* Edit Modal */}
+      <Dialog open={!!editingAsset} onOpenChange={() => setEditingAsset(null)}>
+        <DialogContent className="bg-[#161C20] border-[#303639] text-[#DEE3E7] sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="text-[#E5A24A] uppercase tracking-widest font-black">Edit Asset State</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="location" className="text-xs uppercase font-bold text-[#9E8E7E]">Location</Label>
+              <Input
+                id="location"
+                value={editForm.location}
+                onChange={(e) => setEditForm({...editForm, location: e.target.value})}
+                className="bg-[#090F12] border-[#303639] text-[#DEE3E7]"
+                placeholder="Enter current location"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="remark" className="text-xs uppercase font-bold text-[#9E8E7E]">Remarks</Label>
+              <Input
+                id="remark"
+                value={editForm.remark}
+                onChange={(e) => setEditForm({...editForm, remark: e.target.value})}
+                className="bg-[#090F12] border-[#303639] text-[#DEE3E7]"
+                placeholder="Enter additional notes"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs uppercase font-bold text-[#9E8E7E]">Operational Status</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {['IDLE', 'ON_HIRE', 'MAINTENANCE'].map(s => (
+                  <Button
+                    key={s}
+                    variant="outline"
+                    size="sm"
+                    className={`text-[10px] font-black transition-all ${
+                      editForm.status === s 
+                        ? 'bg-[#E5A24A] text-[#0E1417] border-[#E5A24A]' 
+                        : 'bg-[#090F12] border-[#303639] text-[#9E8E7E] hover:text-[#DEE3E7]'
+                    }`}
+                    onClick={() => setEditForm({...editForm, status: s})}
+                  >
+                    {s.replace('_', ' ')}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="ghost" 
+              onClick={() => setEditingAsset(null)} 
+              className="text-[#9E8E7E] hover:text-[#DEE3E7] hover:bg-[#303639]"
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleUpdate} 
+              disabled={isUpdating}
+              className="bg-[#E5A24A] hover:bg-[#D49139] text-[#0E1417] font-bold"
+            >
+              {isUpdating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
+              Update State
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -248,7 +378,7 @@ function FilterTab({ active, onClick, label }) {
   return (
     <button 
       onClick={onClick}
-      className={`px-4 py-2 rounded-full text-[10px] font-black tracking-widest transition-all ${
+      className={`px-4 py-2 rounded-full text-[10px] font-black tracking-widest transition-all shrink-0 ${
         active 
           ? 'bg-[#E5A24A] text-[#0E1417] shadow-lg shadow-[#E5A24A]/20' 
           : 'text-[#9E8E7E] hover:text-[#DEE3E7] bg-[#161C20]'
@@ -281,7 +411,6 @@ function LoadingRow() {
     <tr className="animate-pulse">
       <td className="px-6 py-4"><div className="h-8 bg-[#303639] rounded-lg w-32" /></td>
       <td className="px-6 py-4"><div className="h-4 bg-[#303639] rounded w-20 mb-2" /><div className="h-3 bg-[#303639] rounded w-12" /></td>
-      <td className="px-6 py-4"><div className="h-4 bg-[#303639] rounded w-24" /></td>
       <td className="px-6 py-4"><div className="h-6 bg-[#303639] rounded w-16" /></td>
       <td className="px-6 py-4"><div className="h-4 bg-[#303639] rounded w-16 ml-auto" /></td>
     </tr>

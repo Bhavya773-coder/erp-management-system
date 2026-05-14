@@ -2,6 +2,20 @@ import { useEffect, useRef, useState } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, StyleSheet, Platform, LogBox, AppState } from 'react-native';
+
+// Suppress known SDK and environment-specific warnings for a clean experience
+// Called at the absolute top to catch early init warnings
+LogBox.ignoreLogs([
+  'expo-notifications',
+  'expo-notifications:',
+  'expo-av',
+  'setBehaviorAsync',
+  'edge-to-edge',
+  'Deprecated',
+  'We recommend you instead use a development build',
+  'NavigationBar',
+]);
+
 import { useAuthStore } from '../store/authStore';
 import { useSocket } from '../hooks/useSocket';
 import { useThemeStore } from '../store/themeStore';
@@ -10,8 +24,7 @@ import { authAPI } from '../lib/api';
 import * as NavigationBar from 'expo-navigation-bar';
 
 if (Platform.OS === 'android') {
-  NavigationBar.setVisibilityAsync('hidden');
-  NavigationBar.setBehaviorAsync('overlay-swipe');
+  NavigationBar.setVisibilityAsync('hidden').catch(() => {});
 }
 
 // Lazy-load expo-notifications to prevent crashes in Expo Go
@@ -19,14 +32,14 @@ let Notifications = null;
 try {
   Notifications = require('expo-notifications');
 } catch (e) {
-  console.warn('expo-notifications not available');
+  // Silent fail for clean dev console
 }
 
 let Constants = null;
 try {
   Constants = require('expo-constants');
 } catch (e) {
-  console.warn('expo-constants not available');
+  // Silent fail for clean dev console
 }
 
 // Notification handler — controls foreground display
@@ -43,12 +56,6 @@ if (Notifications?.setNotificationHandler) {
     },
   });
 }
-
-// Suppress Expo Go warnings
-LogBox.ignoreLogs([
-  'expo-notifications',
-  'expo-notifications:',
-]);
 
 export default function RootLayout() {
   const { isAuthenticated, isLoading, token, checkAuth, user } = useAuthStore();
@@ -80,8 +87,16 @@ export default function RootLayout() {
   }, [isAuthenticated, token, notificationsEnabled]);
 
   // Helper to navigate to chat only once per notification interaction
+  const lastNavigatedChatId = useRef(null);
+  const lastNavigatedTime = useRef(0);
+
   const navigateToChat = (chatId) => {
-    if (hasNavigatedFromNotification.current) return;
+    const now = Date.now();
+    // Debounce: same chatId within 2 seconds
+    if (lastNavigatedChatId.current === chatId && (now - lastNavigatedTime.current) < 2000) {
+      console.log('⏳ Navigation already in progress or recently completed for:', chatId);
+      return;
+    }
     
     // Check if we're already in that specific chat to avoid redundant pushes
     const isAlreadyInTargetChat = segments[0] === 'chat' && segments[1] === chatId;
@@ -90,7 +105,8 @@ export default function RootLayout() {
       return;
     }
 
-    hasNavigatedFromNotification.current = true;
+    lastNavigatedChatId.current = chatId;
+    lastNavigatedTime.current = now;
     console.log('🚀 Navigating to chat from notification:', chatId);
     
     // Use replace if we're already in a chat to keep stack clean, otherwise push
@@ -102,9 +118,6 @@ export default function RootLayout() {
       } else {
         router.push(`/chat/${chatId}`);
       }
-      
-      // Reset the flag after navigation so future taps still work
-      setTimeout(() => { hasNavigatedFromNotification.current = false; }, 1000);
     }, 100);
   };
 
@@ -123,20 +136,22 @@ export default function RootLayout() {
       });
     }
 
-    // Optional: Only check getLastNotificationResponseAsync if no listener event happened yet
-    // This is safer for cold starts on some Android versions
+    // On some platforms/versions, the listener above handles cold starts.
+    // If it doesn't, getLastNotificationResponseAsync acts as a fallback.
     const checkInitialNotification = async () => {
       if (Notifications.getLastNotificationResponseAsync) {
         const response = await Notifications.getLastNotificationResponseAsync();
         if (response?.notification?.request?.content?.data?.chatId) {
           const data = response.notification.request.content.data;
-          console.log('❄️ Cold start notification found:', data.chatId);
+          console.log('❄️ Cold start notification fallback check:', data.chatId);
+          // Only navigate if the listener hasn't already handled it
           navigateToChat(data.chatId);
         }
       }
     };
     
-    checkInitialNotification();
+    // Slight delay for cold start to let the listener fire first if it's going to
+    const coldStartTimer = setTimeout(checkInitialNotification, 500);
 
     // Reset badge when app comes to foreground
     const subscription = AppState.addEventListener('change', nextAppState => {
@@ -147,6 +162,7 @@ export default function RootLayout() {
     });
 
     return () => {
+      clearTimeout(coldStartTimer);
       // Safe cleanup — check if functions exist before calling
       if (notificationListener.current && Notifications.removeNotificationSubscription) {
         Notifications.removeNotificationSubscription(notificationListener.current);
@@ -194,6 +210,7 @@ export default function RootLayout() {
         <Stack.Screen name="new-group" options={{ presentation: 'modal' }} />
         <Stack.Screen name="forward" options={{ presentation: 'modal' }} />
         <Stack.Screen name="profile" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="my-vouchers" />
       </Stack>
     </>
   );

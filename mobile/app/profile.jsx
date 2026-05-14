@@ -41,13 +41,16 @@ export default function ProfileScreen() {
   const [education, setEducation] = useState(user?.education || '');
   const [skills, setSkills] = useState(user?.skills?.join(', ') || '');
   const [sharedDocs, setSharedDocs] = useState([]);
+  const [myVouchers, setMyVouchers] = useState([]);
   const [docsLoading, setDocsLoading] = useState(false);
+  const [vouchersLoading, setVouchersLoading] = useState(false);
   const [downloadingId, setDownloadingId] = useState(null);
 
   const getInitials = (n) => n ? n.split(' ').map(w => w[0]).join('').substring(0,2).toUpperCase() : '?';
 
   useEffect(() => {
     fetchSharedDocuments();
+    fetchMyVouchers();
   }, []);
 
   const fetchSharedDocuments = async () => {
@@ -59,6 +62,18 @@ export default function ProfileScreen() {
       console.error('Failed to fetch shared documents:', err);
     } finally {
       setDocsLoading(false);
+    }
+  };
+
+  const fetchMyVouchers = async () => {
+    setVouchersLoading(true);
+    try {
+      const res = await messageAPI.getMyVouchers();
+      setMyVouchers(res.data?.data?.vouchers || []);
+    } catch (err) {
+      console.error('Failed to fetch vouchers:', err);
+    } finally {
+      setVouchersLoading(false);
     }
   };
 
@@ -223,6 +238,38 @@ export default function ProfileScreen() {
     );
   };
 
+  const renderVoucherItem = (v) => {
+    const vData = v.voucherData || {};
+    const chatName = v.chat?.isGroup ? v.chat?.name : 'Personal Chat';
+    const dateStr = v.createdAt ? format(new Date(v.createdAt), 'dd MMM HH:mm') : '';
+    
+    return (
+      <TouchableOpacity 
+        key={v._id || v.id} 
+        style={[s.docItem, { backgroundColor: Colors.bgSecondary, borderColor: Colors.border }]}
+        onPress={() => router.push(`/chat/${v.chat?._id || v.chat}`)}
+      >
+        <View style={[s.docIcon, { backgroundColor: Colors.accent + '30' }]}>
+          <Ionicons name="receipt" size={22} color={Colors.accent} />
+        </View>
+        <View style={s.docInfo}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text style={[s.docName, { color: Colors.textPrimary }]}>{vData.number || 'Voucher'}</Text>
+            <Text style={{ color: Colors.accent, fontWeight: '700' }}>₹{vData.amount?.toLocaleString('en-IN')}</Text>
+          </View>
+          <Text style={[s.docMeta, { color: Colors.textSecondary }]}>
+            {chatName} • {dateStr}
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 6 }}>
+            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: vData.status === 'APPROVED' ? '#4CAF50' : vData.status === 'DENIED' ? '#F44336' : '#FF9800' }} />
+            <Text style={{ fontSize: 11, color: Colors.textMuted }}>{vData.status || 'PENDING'}</Text>
+          </View>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={Colors.textMuted} />
+      </TouchableOpacity>
+    );
+  };
+
   return (
     <SafeAreaView style={[s.container, { backgroundColor: Colors.bgPrimary }]}>
       <View style={[s.header, { backgroundColor: Colors.bgHeader, borderBottomColor: Colors.border }]}>
@@ -263,6 +310,31 @@ export default function ProfileScreen() {
           {isLoading ? <ActivityIndicator color="#FFF" /> : <Text style={s.saveBtnText}>Save Changes</Text>}
         </TouchableOpacity>
 
+        {/* My Vouchers Section */}
+        <View style={s.docsSection}>
+          <View style={s.docsSectionHeader}>
+            <Ionicons name="receipt-outline" size={22} color={Colors.accent} />
+            <Text style={[s.docsSectionTitle, { color: Colors.textPrimary }]}>My Vouchers</Text>
+          </View>
+          <Text style={[s.docsSectionSub, { color: Colors.textSecondary }]}>
+            Vouchers created by you
+          </Text>
+
+          {vouchersLoading ? (
+            <View style={s.docsLoading}>
+              <ActivityIndicator size="large" color={Colors.accent} />
+            </View>
+          ) : myVouchers.length === 0 ? (
+            <View style={s.docsEmpty}>
+              <Text style={[s.docsEmptyText, { color: Colors.textSecondary }]}>No vouchers created yet</Text>
+            </View>
+          ) : (
+            <View style={s.docsList}>
+              {myVouchers.map(v => renderVoucherItem(v))}
+            </View>
+          )}
+        </View>
+
         {/* Shared Documents Section */}
         <View style={s.docsSection}>
           <View style={s.docsSectionHeader}>
@@ -276,7 +348,6 @@ export default function ProfileScreen() {
           {docsLoading ? (
             <View style={s.docsLoading}>
               <ActivityIndicator size="large" color={Colors.accent} />
-              <Text style={[s.docsLoadingText, { color: Colors.textSecondary }]}>Loading documents...</Text>
             </View>
           ) : sharedDocs.length === 0 ? (
             <View style={s.docsEmpty}>

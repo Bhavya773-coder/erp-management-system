@@ -78,6 +78,7 @@ export const messageAPI = {
     api.post('/messages/forward/bulk', { messageIds, targetChatIds }),
   getMessageForForward: (id) => api.get(`/messages/forward/${id}`),
   getSharedDocuments: () => api.get('/messages/shared/documents'),
+  getMyVouchers: () => api.get('/messages/my/vouchers'),
 };
 
 // ─── File APIs ──────────────────────────────────────────────────────────
@@ -98,6 +99,7 @@ export const fleetAPI = {
   getAssets: () => api.get('/fleet/assets'),
   uploadFileMetadata: (data) => api.post('/fleet', data),
   processFile: (id) => api.post(`/fleet/process/${id}`),
+  updateAsset: (id, data) => api.put(`/fleet/assets/${id}`, data),
 };
 
 export default api;
