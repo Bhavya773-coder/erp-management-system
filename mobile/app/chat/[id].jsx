@@ -10,7 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { useChatStore } from '../../store/chatStore';
 import { useAuthStore } from '../../store/authStore';
@@ -600,7 +600,7 @@ export default function ChatScreen() {
   const handleSaveToGallery = async (url) => {
     try {
       const MediaLibrary = require('expo-media-library');
-      const FileSystem = require('expo-file-system');
+      const FileSystem = require('expo-file-system/legacy');
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert('Permission Denied', 'Gallery access is required to save images.');
@@ -808,7 +808,7 @@ export default function ChatScreen() {
         </View>
       )}
       
-      <View style={[s.inputContainer, { paddingBottom: Math.max(insets.bottom, 8) + (Platform.OS === 'android' ? kbHeight : 0) }]}>
+      <View style={[s.inputContainer, { paddingBottom: (Platform.OS === 'ios' ? (kbVisible ? 8 : Math.max(insets.bottom, 8)) : Math.max(insets.bottom, 8) + kbHeight) }]}>
         <View style={s.inputBubble}>
           <TouchableOpacity onPress={() => setShowAttachments(!showAttachments)} style={s.attachBtn}>
             <Ionicons name={showAttachments ? "close" : "add"} size={26} color={Colors.textMuted} />
@@ -871,7 +871,7 @@ export default function ChatScreen() {
       <KeyboardAvoidingView 
         style={s.flex} 
         behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
-        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 60 : 0}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
         {chatBody}
       </KeyboardAvoidingView>

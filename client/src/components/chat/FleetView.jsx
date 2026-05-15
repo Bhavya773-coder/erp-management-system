@@ -302,6 +302,12 @@ export default function FleetView({ onBack }) {
                         </div>
                       </div>
                       <div className="flex items-center space-x-1 sm:opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 sm:h-9 sm:w-9 text-blue-600 hover:bg-blue-50 rounded-full"
+                          onClick={() => window.open(getFullUrl(file.fileUrl), '_blank')}
+                        >
                           <Download className="h-4 w-4 sm:h-5 sm:h-5" />
                         </Button>
                         {file.fileName.match(/\.(xlsx|xls)$/i) && (

@@ -15,7 +15,12 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.arcadian.chat"
+      "bundleIdentifier": "com.arcadian.chat",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Allow Arcadian Chat to use your camera to send photos.",
+        "NSPhotoLibraryUsageDescription": "Allow Arcadian Chat to access your photos to send images and documents.",
+        "NSMicrophoneUsageDescription": "Allow Arcadian Chat to access your microphone for audio messages."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -39,7 +44,9 @@
           "icon": "./assets/images/icon.png",
           "color": "#25D366"
         }
-      ]
+      ],
+      "expo-secure-store",
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": false
