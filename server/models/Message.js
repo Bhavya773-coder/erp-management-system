@@ -29,6 +29,7 @@ const messageSchema = new mongoose.Schema({
     status: { type: String, enum: ['PENDING', 'COMPLETED'], default: 'PENDING' },
     completedAt: { type: Date }
   },
+  replyTo: { type: mongoose.Schema.Types.ObjectId, ref: 'Message' },
   status: { type: String, enum: ['SENT', 'DELIVERED', 'SEEN'], default: 'SENT' },
   scheduleDate: { type: Date },
   isCompleted: { type: Boolean, default: false },

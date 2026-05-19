@@ -25,7 +25,7 @@ export const useSocket = (token) => {
 
     socketRef.current = io(SOCKET_URL, {
       auth: { token },
-      transports: ['polling', 'websocket'],
+      transports: ['websocket'],
     });
 
     const socket = socketRef.current;

@@ -72,7 +72,7 @@ export const setupSocketHandlers = (io) => {
 
     // Handle send message
     socket.on('message:send', async (data) => {
-      const { chatId, content, messageType = 'TEXT', fileUrl, fileName, fileSize, scheduleDate, tempId, forwarded, forwardCount, voucherData, taskData } = data;
+      const { chatId, content, messageType = 'TEXT', fileUrl, fileName, fileSize, scheduleDate, tempId, forwarded, forwardCount, voucherData, taskData, replyTo } = data;
       
       try {
         // Verify user is member of chat
@@ -118,10 +118,17 @@ export const setupSocketHandlers = (io) => {
           forwardCount: forwardCount || 0,
           voucherData: finalVoucherData,
           taskData: taskData,
+          replyTo: replyTo || null,
           status: 'SENT'
         });
 
-        const populatedMessage = await Message.findById(message._id).populate('sender', 'name');
+        const populatedMessage = await Message.findById(message._id)
+          .populate('sender', 'name')
+          .populate({
+            path: 'replyTo',
+            select: 'content messageType sender fileName fileUrl',
+            populate: { path: 'sender', select: 'name' }
+          });
 
         const formattedMessage = {
           id: populatedMessage._id.toString(),
@@ -138,6 +145,17 @@ export const setupSocketHandlers = (io) => {
           forwardCount: populatedMessage.forwardCount,
           voucherData: populatedMessage.voucherData,
           taskData: populatedMessage.taskData,
+          replyTo: populatedMessage.replyTo ? {
+            id: populatedMessage.replyTo._id.toString(),
+            content: populatedMessage.replyTo.content,
+            messageType: populatedMessage.replyTo.messageType,
+            fileName: populatedMessage.replyTo.fileName,
+            fileUrl: populatedMessage.replyTo.fileUrl,
+            sender: {
+              id: populatedMessage.replyTo.sender._id.toString(),
+              name: populatedMessage.replyTo.sender.name
+            }
+          } : null,
           createdAt: populatedMessage.createdAt,
           senderId: populatedMessage.sender._id.toString(),
           sender: {

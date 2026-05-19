@@ -4,6 +4,7 @@ import {
   KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Modal,
   Image, Dimensions, Share, Keyboard, BackHandler
 } from 'react-native';
+import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +20,7 @@ import { fileAPI } from '../../lib/api';
 import { useTheme, Fonts, Spacing, BorderRadius } from '@/constants/appTheme';
 import { API_BASE_URL } from '@/constants/config';
 import { format, differenceInSeconds, isValid } from 'date-fns';
+import * as MediaUtils from '../../lib/mediaUtils';
 // Audio migration pending expo-audio install
 // import { Audio } from 'expo-av';
 import VoucherModal from '../../components/VoucherModal';
@@ -65,6 +67,39 @@ const getAvatarUrl = (currentChat, otherUser) => {
     return avatar.startsWith('http') ? avatar : `${API_BASE_URL}/${avatar.replace(/^\//, '')}`;
   }
   return `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'User')}&background=random&color=fff`;
+};
+
+const MediaDownloadWrapper = ({ url, localPath, Colors, children, onDownloaded }) => {
+  const [progress, setProgress] = useState(null);
+  const [isLocal, setIsLocal] = useState(false);
+
+  useEffect(() => {
+    MediaUtils.checkFileExists(localPath).then(exists => {
+      setIsLocal(exists);
+      if (exists && onDownloaded) onDownloaded(localPath);
+    });
+  }, [localPath]);
+
+  const startDownload = async () => {
+    if (isLocal || progress !== null) return;
+    const uri = await MediaUtils.downloadFile(url, localPath, (p) => setProgress(p));
+    if (uri) {
+      setIsLocal(true);
+      setProgress(null);
+      if (onDownloaded) onDownloaded(uri);
+    }
+  };
+
+  return (
+    <TouchableOpacity activeOpacity={0.9} onPress={startDownload} disabled={isLocal}>
+      {children(isLocal, progress)}
+      {progress !== null && (
+        <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 4, backgroundColor: 'rgba(255,255,255,0.3)' }}>
+          <View style={{ height: '100%', width: `${progress * 100}%`, backgroundColor: Colors.accent }} />
+        </View>
+      )}
+    </TouchableOpacity>
+  );
 };
 
 const LiveTimer = ({ endTime, completedAt, status }) => {
@@ -167,7 +202,7 @@ const s = StyleSheet.create({
   viewerImage: { width: '100%', height: '100%' }
 });
 
-const MessageItem = memo(({ msg, myId, currentChat, isMe, Colors, isSelected, isSelectionMode, onLongPress, onPress, onImagePress, onVoucherAction, onTaskAction, onDownload, userRole, setSelectedVoucher, progress, isDownloaded }) => {
+const MessageItem = memo(({ msg, myId, currentChat, isMe, Colors, isSelected, isSelectionMode, onLongPress, onPress, onSwipeToReply, onReplyPress, onImagePress, onVoucherAction, onTaskAction, onDownload, userRole, setSelectedVoucher }) => {
   const showSender = currentChat?.isGroup && !isMe;
   const time = msg.createdAt ? format(new Date(msg.createdAt), 'HH:mm') : '';
 
@@ -181,102 +216,154 @@ const MessageItem = memo(({ msg, myId, currentChat, isMe, Colors, isSelected, is
   };
   const tick = getTick();
 
+  // Media Path Logic
+  const getLocalPath = (url) => {
+    if (!url) return null;
+    const fileName = url.split('/').pop();
+    if (msg.messageType === 'VOUCHER' && msg.voucherData?.number) {
+      return MediaUtils.getVoucherLocalPath(msg.voucherData.number, fileName);
+    }
+    return MediaUtils.getChatMediaLocalPath(msg.chatId || currentChat?.id, fileName);
+  };
+
+  const swipeableRef = useRef(null);
+
   return (
-    <TouchableOpacity
-      style={[
-        s.bubbleWrapper, 
-        isSelected && { backgroundColor: 'rgba(33, 150, 243, 0.15)' },
-        isSelectionMode && { flexDirection: 'row', alignItems: 'center' }
-      ]}
-      onLongPress={() => onLongPress(msg)}
-      onPress={() => (isSelectionMode ? onPress(msg) : (msg.messageType === 'IMAGE' ? onImagePress(msg) : onPress(msg)))}
-      activeOpacity={0.8}
-      delayLongPress={400}
-    >
-      {isSelectionMode && (
-        <View style={{ marginRight: 12, marginLeft: 4 }}>
-          <Ionicons 
-            name={isSelected ? "checkbox" : "square-outline"} 
-            size={24} 
-            color={isSelected ? Colors.accent : Colors.textMuted} 
-          />
+    <Swipeable 
+      ref={swipeableRef}
+      renderLeftActions={() => (
+        <View style={{ width: 60, justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.1)', justifyContent: 'center', alignItems: 'center' }}>
+            <Ionicons name="arrow-undo" size={18} color={Colors.textPrimary} />
+          </View>
         </View>
       )}
-      <View style={[
-        s.bubble, 
-        isMe ? { backgroundColor: Colors.bgBubbleOutgoing, alignSelf: 'flex-end', borderBottomRightRadius: 4 } : { backgroundColor: Colors.bgBubbleIncoming, alignSelf: 'flex-start', borderBottomLeftRadius: 4 },
-        isSelected && { backgroundColor: 'rgba(33, 150, 243, 0.1)' }
-      ]}>
-        {msg.forwarded && (
-          <View style={s.forwardBadge}>
-            <Ionicons name="arrow-redo" size={12} color={Colors.textMuted} />
+      onSwipeableOpen={(direction) => {
+        if (onSwipeToReply) onSwipeToReply(msg);
+        swipeableRef.current?.close();
+      }}
+      enabled={!isSelectionMode}
+      friction={2}
+    >
+      <TouchableOpacity
+        style={[
+          s.bubbleWrapper, 
+          isSelected && { backgroundColor: 'rgba(33, 150, 243, 0.15)' },
+          { flexDirection: 'row', alignItems: 'center', width: '100%' }
+        ]}
+        onLongPress={() => onLongPress(msg)}
+        onPress={() => isSelectionMode ? onPress(msg) : onPress(msg)}
+        activeOpacity={0.8}
+        delayLongPress={400}
+      >
+        {isSelectionMode && (
+          <View style={{ width: 40, alignItems: 'center' }}>
+            <Ionicons 
+              name={isSelected ? "checkbox" : "square-outline"} 
+              size={24} 
+              color={isSelected ? Colors.accent : Colors.textMuted} 
+            />
           </View>
         )}
-        {showSender && <Text style={[s.senderName, { color: Colors.accent }]}>{msg.sender?.name}</Text>}
+        <View style={{ flex: 1, flexDirection: 'column' }}>
+          <View style={[
+            s.bubble, 
+            isMe ? { backgroundColor: Colors.bgBubbleOutgoing, alignSelf: 'flex-end', borderBottomRightRadius: 4 } : { backgroundColor: Colors.bgBubbleIncoming, alignSelf: 'flex-start', borderBottomLeftRadius: 4 },
+            isSelected && { backgroundColor: 'rgba(33, 150, 243, 0.1)' }
+          ]}>
+            {msg.replyTo && (
+              <TouchableOpacity 
+                activeOpacity={0.7}
+                onPress={() => onReplyPress && onReplyPress(msg.replyTo.id || msg.replyTo._id)}
+                style={{ backgroundColor: 'rgba(0,0,0,0.08)', borderLeftWidth: 4, borderLeftColor: Colors.accent, padding: 8, borderRadius: 4, marginBottom: 4 }}
+              >
+                <Text style={{ fontSize: 12, fontWeight: 'bold', color: Colors.accent, marginBottom: 2 }}>{msg.replyTo.sender?.name}</Text>
+                <Text style={{ fontSize: 13, color: Colors.textPrimary }} numberOfLines={2}>
+                  {msg.replyTo.content || (msg.replyTo.messageType === 'IMAGE' ? '📷 Photo' : msg.replyTo.messageType === 'FILE' ? '📄 Document' : 'Media')}
+                </Text>
+              </TouchableOpacity>
+            )}
+            {msg.forwarded && (
+              <View style={s.forwardBadge}>
+                <Ionicons name="arrow-redo" size={12} color={Colors.textMuted} />
+                <Text style={[s.forwardText, { color: Colors.textMuted }]}>Forwarded</Text>
+              </View>
+            )}
+            {showSender && <Text style={[s.senderName, { color: Colors.accent }]}>{msg.sender?.name}</Text>}
+        
         {msg.isDeleted ? (
-          <View style={s.deletedRow}><Ionicons name="ban" size={14} color={Colors.textMuted} /><Text style={[s.deletedText, { color: Colors.textMuted }]}>Deleted</Text></View>
+          <View style={s.deletedRow}>
+            <Ionicons name="ban" size={14} color={Colors.textMuted} />
+            <Text style={[s.deletedText, { color: Colors.textMuted }]}>This message was deleted</Text>
+          </View>
         ) : msg.messageType === 'IMAGE' ? (
           <View style={s.imageBox}>
-            {msg.fileUrl && msg.fileUrl.includes(',') ? (
+            {msg.fileUrl?.includes(',') ? (
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', width: 210, justifyContent: 'space-between' }}>
-                {msg.fileUrl.split(',').slice(0, 4).map((url, idx, arr) => {
+                {msg.fileUrl.split(',').slice(0, 4).map((url, idx) => {
                   const fullUrl = getMediaUrl(url);
+                  const localPath = getLocalPath(url);
                   const total = msg.fileUrl.split(',').length;
                   return (
-                    <TouchableOpacity key={idx} activeOpacity={0.8} onPress={() => onImagePress(msg, fullUrl)} style={{ width: 100, height: 100, marginBottom: 5 }}>
-                      <Image source={{ uri: fullUrl }} style={{ width: '100%', height: '100%', borderRadius: 8 }} />
-                      {idx === 3 && total > 4 && (
-                        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 8, justifyContent: 'center', alignItems: 'center' }}>
-                          <Text style={{ color: '#FFF', fontSize: 24, fontWeight: 'bold' }}>+{total - 4}</Text>
-                        </View>
+                    <MediaDownloadWrapper key={idx} url={fullUrl} localPath={localPath} Colors={Colors}>
+                      {(isLocal, progress) => (
+                        <TouchableOpacity 
+                          activeOpacity={0.8} 
+                          onPress={() => onImagePress(msg, isLocal ? localPath : fullUrl)} 
+                          style={{ width: 100, height: 100, marginBottom: 5 }}
+                        >
+                          <Image source={{ uri: isLocal ? localPath : fullUrl }} style={{ width: '100%', height: '100%', borderRadius: 8 }} />
+                          {idx === 3 && total > 4 && (
+                            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 8, justifyContent: 'center', alignItems: 'center' }}>
+                              <Text style={{ color: '#FFF', fontSize: 24, fontWeight: 'bold' }}>+{total - 4}</Text>
+                            </View>
+                          )}
+                        </TouchableOpacity>
                       )}
-                    </TouchableOpacity>
+                    </MediaDownloadWrapper>
                   );
                 })}
               </View>
             ) : (
-              <TouchableOpacity activeOpacity={0.8} onPress={() => onImagePress(msg, getMediaUrl(msg.fileUrl))}>
-                <Image source={{ uri: getMediaUrl(msg.fileUrl) }} style={s.messageImage} />
-              </TouchableOpacity>
+              <MediaDownloadWrapper url={getMediaUrl(msg.fileUrl)} localPath={getLocalPath(msg.fileUrl)} Colors={Colors}>
+                {(isLocal, progress) => (
+                  <TouchableOpacity activeOpacity={0.8} onPress={() => onImagePress(msg, isLocal ? getLocalPath(msg.fileUrl) : getMediaUrl(msg.fileUrl))}>
+                    <Image source={{ uri: isLocal ? getLocalPath(msg.fileUrl) : getMediaUrl(msg.fileUrl) }} style={s.messageImage} />
+                  </TouchableOpacity>
+                )}
+              </MediaDownloadWrapper>
             )}
             {msg.content && <Text style={[s.msgText, { color: Colors.textPrimary, marginTop: 4 }]}>{msg.content}</Text>}
           </View>
         ) : msg.messageType === 'FILE' ? (
-          <TouchableOpacity 
-            activeOpacity={0.7} 
-            onPress={() => onDownload(msg)}
-            style={[s.fileBox, { backgroundColor: isMe ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.06)' }]}
-          >
-            <View style={[s.fileIconWrapper, { backgroundColor: Colors.accent }]}>
-              <Ionicons name="document-text" size={24} color="#FFF" />
-            </View>
-            <View style={s.fileInfo}>
-              <Text style={[s.fileName, { color: Colors.textPrimary }]} numberOfLines={2} ellipsizeMode="middle">
-                {msg.fileName || msg.content || msg.fileUrl?.split('/').pop() || 'Document'}
-              </Text>
-              {progress !== undefined ? (
-                <View style={{ marginTop: 4 }}>
-                  <View style={{ height: 4, backgroundColor: 'rgba(0,0,0,0.1)', borderRadius: 2, overflow: 'hidden' }}>
-                    <View style={{ height: '100%', width: `${progress * 100}%`, backgroundColor: Colors.accent }} />
-                  </View>
-                  <Text style={{ fontSize: 10, color: Colors.textSecondary, marginTop: 2 }}>
-                    {Math.round(progress * 100)}%
+          <MediaDownloadWrapper url={getMediaUrl(msg.fileUrl)} localPath={getLocalPath(msg.fileUrl)} Colors={Colors}>
+            {(isLocal, progress) => (
+              <TouchableOpacity 
+                activeOpacity={0.7} 
+                onPress={() => onDownload(msg, isLocal ? getLocalPath(msg.fileUrl) : null)}
+                style={[s.fileBox, { backgroundColor: isMe ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.06)' }]}
+              >
+                <View style={[s.fileIconWrapper, { backgroundColor: Colors.accent }]}>
+                  <Ionicons name="document-text" size={24} color="#FFF" />
+                </View>
+                <View style={s.fileInfo}>
+                  <Text style={[s.fileName, { color: Colors.textPrimary }]} numberOfLines={2} ellipsizeMode="middle">
+                    {msg.fileName || msg.content || msg.fileUrl?.split('/').pop() || 'Document'}
+                  </Text>
+                  <Text style={[s.fileSize, { color: Colors.textSecondary }]}>
+                    {msg.fileSize ? `${(msg.fileSize / 1024).toFixed(1)} KB` : 'Document'}
                   </Text>
                 </View>
-              ) : (
-                <Text style={[s.fileSize, { color: Colors.textSecondary }]}>
-                  {msg.fileSize ? `${(msg.fileSize / 1024).toFixed(1)} KB` : 'Document'}
-                </Text>
-              )}
-            </View>
-            <View style={{ backgroundColor: Colors.accent + '20', borderRadius: 20, padding: 8 }}>
-              <Ionicons 
-                name={isDownloaded ? "eye-outline" : progress !== undefined ? "sync-outline" : "download-outline"} 
-                size={20} 
-                color={Colors.accent} 
-              />
-            </View>
-          </TouchableOpacity>
+                <View style={{ backgroundColor: Colors.accent + '20', borderRadius: 20, padding: 8 }}>
+                  <Ionicons 
+                    name={isLocal ? "eye-outline" : "download-outline"} 
+                    size={20} 
+                    color={Colors.accent} 
+                  />
+                </View>
+              </TouchableOpacity>
+            )}
+          </MediaDownloadWrapper>
         ) : msg.messageType === 'TASK' ? (
           <View style={[s.voucherBox, { backgroundColor: Colors.bgSecondary }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
@@ -305,11 +392,30 @@ const MessageItem = memo(({ msg, myId, currentChat, isMe, Colors, isSelected, is
                 <Text style={s.statusTagText}>{msg.voucherData?.status}</Text>
               </View>
             </View>
+            
+            {/* Voucher Image Thumbnail with Local Storage Support */}
+            {msg.voucherData?.supportingImages && (
+              <MediaDownloadWrapper 
+                url={getMediaUrl(msg.voucherData.supportingImages.split(',')[0])} 
+                localPath={MediaUtils.getVoucherLocalPath(msg.voucherData.number, msg.voucherData.supportingImages.split(',')[0].split('/').pop())}
+                Colors={Colors}
+              >
+                {(isLocal, progress) => (
+                  <TouchableOpacity 
+                    style={{ height: 120, width: '100%', marginBottom: 12, borderRadius: 8, overflow: 'hidden' }}
+                    onPress={() => onImagePress(msg, isLocal ? MediaUtils.getVoucherLocalPath(msg.voucherData.number, msg.voucherData.supportingImages.split(',')[0].split('/').pop()) : getMediaUrl(msg.voucherData.supportingImages.split(',')[0]))}
+                  >
+                    <Image 
+                      source={{ uri: isLocal ? MediaUtils.getVoucherLocalPath(msg.voucherData.number, msg.voucherData.supportingImages.split(',')[0].split('/').pop()) : getMediaUrl(msg.voucherData.supportingImages.split(',')[0]) }} 
+                      style={{ width: '100%', height: '100%' }} 
+                    />
+                  </TouchableOpacity>
+                )}
+              </MediaDownloadWrapper>
+            )}
+
             <Text style={[s.voucherAmt, { color: Colors.accent }]}>₹{msg.voucherData?.amount?.toLocaleString('en-IN')}</Text>
             <Text style={[s.voucherMeta, { color: Colors.textSecondary }]}>Prepared by: {msg.voucherData?.preparedBy || msg.sender?.name || 'Unknown'}</Text>
-            {msg.voucherData?.approvedBy && (
-              <Text style={[s.voucherMeta, { color: Colors.textSecondary, marginTop: 2 }]}>Approved by: {msg.voucherData.approvedBy}</Text>
-            )}
             <TouchableOpacity 
               style={[s.voucherBtn, { backgroundColor: Colors.accent + '20', marginTop: 12 }]} 
               onPress={() => setSelectedVoucher(msg)}
@@ -342,7 +448,9 @@ const MessageItem = memo(({ msg, myId, currentChat, isMe, Colors, isSelected, is
           {tick && <Ionicons name={tick.name} size={15} color={tick.color} style={s.tick} />}
         </View>
       </View>
+      </View>
     </TouchableOpacity>
+    </Swipeable>
   );
 }, (prev, next) => {
   return prev.isSelected === next.isSelected && 
@@ -351,8 +459,6 @@ const MessageItem = memo(({ msg, myId, currentChat, isMe, Colors, isSelected, is
          prev.msg.voucherData?.status === next.msg.voucherData?.status &&
          prev.msg.taskData?.status === next.msg.taskData?.status &&
          prev.userRole === next.userRole &&
-         prev.progress === next.progress &&
-         prev.isDownloaded === next.isDownloaded &&
          prev.msg.id === next.msg.id;
 });
 
@@ -369,6 +475,7 @@ export default function ChatScreen() {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
+  const [replyingTo, setReplyingTo] = useState(null);
   const [showAttachments, setShowAttachments] = useState(false);
   const [viewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
@@ -431,6 +538,12 @@ export default function ChatScreen() {
 
   useEffect(() => {
     const load = async () => {
+      // PREVENT FLICKER: Clear local view if ID changed
+      if (currentChat && currentChat.id !== chatId) {
+        // We use a local state or just let the store update.
+        // But the store's fetchChat already clears messages.
+      }
+      
       isFirstLoad.current = true;
       if (chatId) {
         await fetchChat(chatId);
@@ -507,6 +620,10 @@ export default function ChatScreen() {
         setSelectedIds([]);
         return true;
       }
+      if (replyingTo) {
+        setReplyingTo(null);
+        return true;
+      }
       if (viewerVisible) { setViewerVisible(false); return true; }
       if (voucherVisible) { setVoucherVisible(false); return true; }
       if (voucherDetailVisible) { setVoucherDetailVisible(false); return true; }
@@ -520,7 +637,7 @@ export default function ChatScreen() {
     };
     const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
     return () => backHandler.remove();
-  }, [selectedIds, viewerVisible, voucherVisible, voucherDetailVisible, taskDetailVisible]);
+  }, [selectedIds, replyingTo, viewerVisible, voucherVisible, voucherDetailVisible, taskDetailVisible]);
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -559,9 +676,11 @@ export default function ChatScreen() {
     const content = overrideContent || text.trim();
     if (!content && !fileData) return;
     const tempId = `temp_${Date.now()}`;
-    addMessage({ id: tempId, tempId, chatId, content, messageType: overrideType, status: 'SENT', createdAt: new Date().toISOString(), senderId: myId, sender: { id: myId, name: user?.name }, ...fileData });
-    sendMessage({ chatId, content, messageType: overrideType, tempId, ...fileData });
+    const replyData = replyingTo ? { replyTo: replyingTo } : {};
+    addMessage({ id: tempId, tempId, chatId, content, messageType: overrideType, status: 'SENT', createdAt: new Date().toISOString(), senderId: myId, sender: { id: myId, name: user?.name }, ...fileData, ...replyData });
+    sendMessage({ chatId, content, messageType: overrideType, tempId, replyTo: replyingTo ? (replyingTo.id || replyingTo._id) : null, ...fileData });
     if (!overrideContent) setText('');
+    setReplyingTo(null);
   };
 
   const pickImage = async (useCamera) => {
@@ -724,17 +843,20 @@ export default function ChatScreen() {
     }
   };
 
+  const selectedIdsRef = useRef(selectedIds);
+  useEffect(() => {
+    selectedIdsRef.current = selectedIds;
+  }, [selectedIds]);
+
   const handleLongPress = useCallback((m) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSelectedIds([m.id || m.tempId]);
   }, []);
 
   const handlePress = useCallback((m) => {
-    if (selectedIds.length > 0) {
-      const newS = selectedIds.includes(m.id || m.tempId) 
-        ? selectedIds.filter(id => id !== (m.id || m.tempId)) 
-        : [...selectedIds, m.id || m.tempId];
-      setSelectedIds(newS);
+    const currentSelected = selectedIdsRef.current;
+    if (currentSelected.length > 0) {
+      setSelectedIds(prev => prev.includes(m.id || m.tempId) ? prev.filter(id => id !== (m.id || m.tempId)) : [...prev, m.id || m.tempId]);
     } else if (m.messageType === 'VOUCHER') {
       setSelectedVoucher(m);
       setVoucherDetailVisible(true);
@@ -742,7 +864,24 @@ export default function ChatScreen() {
       setSelectedTask(m);
       setTaskDetailVisible(true);
     }
-  }, [selectedIds]);
+  }, []);
+
+  const handleSwipeToReply = useCallback((m) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setReplyingTo(m);
+    setTimeout(() => {
+      // Focus text input (if we had a ref, otherwise it's just visual)
+    }, 100);
+  }, []);
+
+  const handleReplyPress = useCallback((replyId) => {
+    const idx = messages.findIndex(m => (m.id || m._id) === replyId);
+    if (idx !== -1 && flatListRef.current) {
+      flatListRef.current.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 });
+      
+      // Optional: We can add a brief highlight effect to the message later if needed
+    }
+  }, [messages]);
 
   const handleImagePress = useCallback((m, url) => {
     if (selectedIds.length > 0) {
@@ -769,6 +908,8 @@ export default function ChatScreen() {
         isSelectionMode={selectedIds.length > 0}
         onLongPress={handleLongPress} 
         onPress={handlePress} 
+        onSwipeToReply={handleSwipeToReply}
+        onReplyPress={handleReplyPress}
         onImagePress={handleImagePress} 
         onVoucherAction={sendVoucherAction}
         onTaskAction={onTaskAction}
@@ -779,7 +920,7 @@ export default function ChatScreen() {
         isDownloaded={localFiles[item.fileName || item.fileUrl?.split('/').pop()]}
       />
     );
-  }, [myId, currentChat, Colors, selectedIds, handleLongPress, handlePress, handleImagePress, sendVoucherAction, onTaskAction, handleDownloadFile, downloadingItems, localFiles]);
+  }, [myId, currentChat, Colors, selectedIds, handleLongPress, handlePress, handleSwipeToReply, handleReplyPress, handleImagePress, sendVoucherAction, onTaskAction, handleDownloadFile, downloadingItems, localFiles]);
 
   const chatBody = useMemo(() => (
     <>
@@ -794,6 +935,14 @@ export default function ChatScreen() {
         initialNumToRender={15}
         maxToRenderPerBatch={10}
         windowSize={10}
+        onScrollToIndexFailed={(info) => {
+          const wait = new Promise(resolve => setTimeout(resolve, 500));
+          wait.then(() => {
+            if (flatListRef.current) {
+              flatListRef.current.scrollToIndex({ index: info.index, animated: true, viewPosition: 0.5 });
+            }
+          });
+        }}
         removeClippedSubviews={Platform.OS === 'android'}
         ListHeaderComponent={hasMore ? <TouchableOpacity onPress={() => { skipScroll.current = true; loadMoreMessages(chatId); }}><View style={s.loadMore}><Text style={[s.loadMoreText, { color: Colors.accent }]}>Load earlier</Text></View></TouchableOpacity> : null} 
       />
@@ -808,6 +957,18 @@ export default function ChatScreen() {
         </View>
       )}
       
+      {replyingTo && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.bgSecondary, padding: 8, marginHorizontal: 8, marginTop: 4, borderRadius: 8, borderLeftWidth: 4, borderLeftColor: Colors.accent }}>
+          <View style={{ flex: 1, paddingLeft: 4 }}>
+            <Text style={{ fontSize: 12, fontWeight: 'bold', color: Colors.accent }}>Replying to {replyingTo.sender?.name || 'User'}</Text>
+            <Text style={{ fontSize: 13, color: Colors.textSecondary }} numberOfLines={1}>{replyingTo.content || (replyingTo.messageType === 'IMAGE' ? '📷 Photo' : 'Document')}</Text>
+          </View>
+          <TouchableOpacity onPress={() => setReplyingTo(null)} style={{ padding: 4 }}>
+            <Ionicons name="close" size={20} color={Colors.textMuted} />
+          </TouchableOpacity>
+        </View>
+      )}
+
       <View style={[s.inputContainer, { paddingBottom: (Platform.OS === 'ios' ? (kbVisible ? 8 : Math.max(insets.bottom, 8)) : Math.max(insets.bottom, 8) + kbHeight) }]}>
         <View style={s.inputBubble}>
           <TouchableOpacity onPress={() => setShowAttachments(!showAttachments)} style={s.attachBtn}>
@@ -833,16 +994,21 @@ export default function ChatScreen() {
         </TouchableOpacity>
       </View>
     </>
-  ), [messages, renderMessage, showAttachments, text, Colors, insets, kbHeight, sending]);
+  ), [messages, renderMessage, showAttachments, text, Colors, insets, kbHeight, sending, replyingTo]);
 
   return (
-    <View style={[s.container, { backgroundColor: Colors.bgChat, paddingTop: insets.top }]}>
+    <GestureHandlerRootView style={[s.container, { backgroundColor: Colors.bgChat, paddingTop: insets.top }]}>
       <View style={[s.header, { backgroundColor: Colors.bgHeader, borderBottomColor: Colors.border, height: 60 }]}>
         {selectedIds.length > 0 ? (
           <>
             <TouchableOpacity onPress={() => setSelectedIds([])}><Ionicons name="close" size={26} color={Colors.textPrimary} /></TouchableOpacity>
             <Text style={[s.headerTitle, { color: Colors.textPrimary, flex: 1 }]}>{selectedIds.length}</Text>
             <TouchableOpacity onPress={deleteSelected} style={s.headerAction}><Ionicons name="trash-outline" size={24} color={Colors.textPrimary} /></TouchableOpacity>
+            {selectedIds.length === 1 && (
+              <TouchableOpacity onPress={() => { setReplyingTo(messages.find(m => (m.id || m._id) === selectedIds[0])); setSelectedIds([]); }} style={s.headerAction}>
+                <Ionicons name="arrow-undo-outline" size={24} color={Colors.textPrimary} />
+              </TouchableOpacity>
+            )}
             <TouchableOpacity onPress={() => { router.push({ pathname: '/forward', params: { messageIds: selectedIds.join(',') } }); setSelectedIds([]); }} style={s.headerAction}><Ionicons name="arrow-redo-outline" size={24} color={Colors.textPrimary} /></TouchableOpacity>
           </>
         ) : (
@@ -967,6 +1133,6 @@ export default function ChatScreen() {
           <FlatList data={chatImages} horizontal pagingEnabled initialScrollIndex={viewerIndex} getItemLayout={(d, i) => ({ length: width, offset: width * i, i })} onMomentumScrollEnd={(e) => setViewerIndex(Math.round(e.nativeEvent.contentOffset.x / width))} renderItem={({ item }) => <View style={s.viewerSlide}><Image source={{ uri: item.url }} style={s.viewerImage} resizeMode="contain" /></View>} keyExtractor={i => i.id} />
         </SafeAreaView>
       </Modal>
-    </View>
+    </GestureHandlerRootView>
   );
 }

@@ -179,6 +179,7 @@ router.get('/:chatId', authenticate, async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const messages = await Message.find(query)
       .populate('sender', 'name')
+      .populate({ path: 'replyTo', select: 'content messageType fileUrl fileName sender', populate: { path: 'sender', select: 'name' } })
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));

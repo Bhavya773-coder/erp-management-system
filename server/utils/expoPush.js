@@ -29,14 +29,18 @@ export const sendExpoPushNotifications = async (expoPushTokens, payload) => {
       priority: 'high',
       channelId: payload.channelId || 'messages',
       badge: payload.badge || 1,
-      // Android-specific
       ...(payload.subtitle && { subtitle: payload.subtitle }),
     });
   }
 
   if (messages.length === 0) return;
 
-  // Expo recommends batching - chunks of up to 100
+  // Group messages by experienceId to avoid PUSH_TOO_MANY_EXPERIENCE_IDS
+  // Since we don't know the experienceId upfront from the token string easily,
+  // we will chunk them but if we get the specific error, we will handle it.
+  // IMPROVED: Grouping by "project" is usually handled by splitting the work.
+  // For now, we'll send them in smaller chunks or catch the multi-experience error.
+  
   const chunks = expo.chunkPushNotifications(messages);
   const results = [];
 
@@ -45,22 +49,38 @@ export const sendExpoPushNotifications = async (expoPushTokens, payload) => {
       const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
       results.push(...ticketChunk);
       
-      // Log results
       ticketChunk.forEach((ticket, idx) => {
         if (ticket.status === 'ok') {
           console.log(`✅ Expo push sent to ${chunk[idx].to}`);
         } else if (ticket.status === 'error') {
-          if (!ticket.message?.includes('FCM server key')) {
-            console.error(`❌ Expo push error: ${ticket.message}`);
-          }
-          // If the token is invalid, mark it for removal
+          console.error(`❌ Expo push error: ${ticket.message}`);
           if (ticket.details?.error === 'DeviceNotRegistered') {
             console.log(`🗑️ Token ${chunk[idx].to} is no longer valid`);
           }
         }
       });
     } catch (error) {
-      console.error('❌ Expo push chunk send error:', error);
+      // HANDLE: PUSH_TOO_MANY_EXPERIENCE_IDS
+      if (error.code === 'PUSH_TOO_MANY_EXPERIENCE_IDS' && error.details) {
+        console.log('🔄 Detected mixed Experience IDs. Re-grouping and retrying...');
+        
+        for (const [experienceId, tokens] of Object.entries(error.details)) {
+          const groupMessages = messages.filter(m => tokens.includes(m.to));
+          const groupChunks = expo.chunkPushNotifications(groupMessages);
+          
+          for (const gChunk of groupChunks) {
+            try {
+              const gTickets = await expo.sendPushNotificationsAsync(gChunk);
+              results.push(...gTickets);
+              console.log(`✅ Retried and sent chunk for experience: ${experienceId}`);
+            } catch (gErr) {
+              console.error(`❌ Retry failed for experience ${experienceId}:`, gErr);
+            }
+          }
+        }
+      } else {
+        console.error('❌ Expo push chunk send error:', error);
+      }
     }
   }
 

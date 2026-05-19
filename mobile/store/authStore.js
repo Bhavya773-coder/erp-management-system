@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authAPI, userAPI } from '../lib/api';
+import { initStorage } from '../lib/mediaUtils';
 
 export const useAuthStore = create((set, get) => ({
   user: null,
@@ -17,6 +18,9 @@ export const useAuthStore = create((set, get) => ({
 
       await AsyncStorage.setItem('token', token);
       await AsyncStorage.setItem('user', JSON.stringify(user));
+
+      // Initialize local media storage folders
+      await initStorage();
 
       set({ user, token, isAuthenticated: true, isLoading: false });
       return { success: true };
@@ -38,6 +42,8 @@ export const useAuthStore = create((set, get) => ({
 
       await AsyncStorage.setItem('token', token);
       await AsyncStorage.setItem('user', JSON.stringify(user));
+      
+      await initStorage();
 
       set({ user, token, isAuthenticated: true, isLoading: false });
       return { success: true };
@@ -70,11 +76,31 @@ export const useAuthStore = create((set, get) => ({
       const { user } = response.data.data;
 
       await AsyncStorage.setItem('user', JSON.stringify(user));
+      
+      // Initialize local media storage folders
+      await initStorage();
+
       set({ user, token, isAuthenticated: true, isLoading: false });
       return true;
     } catch (error) {
-      await AsyncStorage.multiRemove(['token', 'user']);
-      set({ user: null, token: null, isAuthenticated: false, isLoading: false });
+      console.error('Auth check failed:', error.message);
+      
+      // CRITICAL: Only logout if it's a 401 Unauthorized or 403 Forbidden
+      // This prevents logging out during server maintenance or poor network.
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        await AsyncStorage.multiRemove(['token', 'user']);
+        set({ user: null, token: null, isAuthenticated: false, isLoading: false });
+        return false;
+      }
+      
+      // For other errors (500, network error), keep the current local session
+      const savedUser = await AsyncStorage.getItem('user');
+      if (savedUser) {
+        set({ user: JSON.parse(savedUser), token, isAuthenticated: true, isLoading: false });
+        return true;
+      }
+      
+      set({ isLoading: false });
       return false;
     }
   },
@@ -96,6 +122,19 @@ export const useAuthStore = create((set, get) => ({
 
   updateUser: (userData) => {
     set({ user: { ...get().user, ...userData } });
+  },
+
+  resetPassword: async (resetData) => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await authAPI.resetPassword(resetData);
+      set({ isLoading: false });
+      return { success: true, message: response.data.message };
+    } catch (error) {
+      const message = error.response?.data?.message || 'Password reset failed';
+      set({ error: message, isLoading: false });
+      return { success: false, error: message };
+    }
   },
 
   clearError: () => set({ error: null }),

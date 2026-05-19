@@ -112,13 +112,34 @@ export const useAuthStore = create(
           localStorage.setItem('user', JSON.stringify(user));
           return true;
         } catch (error) {
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-          set({ 
-            user: null, 
-            token: null, 
-            isAuthenticated: false 
-          });
+          console.error('Web auth check failed:', error.message);
+          
+          // Only logout if it's explicitly 401 Unauthorized or 403 Forbidden
+          if (error.response?.status === 401 || error.response?.status === 403) {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            set({ 
+              user: null, 
+              token: null, 
+              isAuthenticated: false 
+            });
+            return false;
+          }
+
+          // Otherwise keep local session on network error / offline
+          if (savedUser) {
+            try {
+              set({
+                user: JSON.parse(savedUser),
+                token,
+                isAuthenticated: true
+              });
+              return true;
+            } catch (e) {
+              // fallback
+            }
+          }
+
           return false;
         }
       },
@@ -143,6 +164,19 @@ export const useAuthStore = create(
 
       updateUser: (userData) => {
         set({ user: { ...get().user, ...userData } });
+      },
+
+      resetPassword: async (resetData) => {
+        set({ isLoading: true, error: null });
+        try {
+          const response = await authAPI.resetPassword(resetData);
+          set({ isLoading: false });
+          return { success: true, message: response.data.message };
+        } catch (error) {
+          const message = error.response?.data?.message || 'Password reset failed';
+          set({ error: message, isLoading: false });
+          return { success: false, error: message };
+        }
       },
 
       clearError: () => set({ error: null }),

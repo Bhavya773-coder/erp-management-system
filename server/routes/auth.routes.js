@@ -67,7 +67,7 @@ router.post('/signup',
       const token = jwt.sign(
         { userId: user._id, email: user.email, role: user.role },
         process.env.JWT_SECRET,
-        { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+        { expiresIn: process.env.JWT_EXPIRES_IN || '365d' }
       );
 
       res.status(201).json({
@@ -155,7 +155,7 @@ router.post('/login',
       const token = jwt.sign(
         { userId: user._id, email: user.email, role: user.role },
         process.env.JWT_SECRET,
-        { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+        { expiresIn: process.env.JWT_EXPIRES_IN || '365d' }
       );
 
       res.json({
@@ -350,5 +350,40 @@ router.delete('/fcm-token', async (req, res) => {
     res.status(401).json({ success: false, message: 'Invalid or expired token' });
   }
 });
+
+// @route   POST /api/auth/reset-password
+// @desc    Reset password using email
+// @access  Public
+router.post('/reset-password',
+  [
+    body('email').isEmail().withMessage('Valid email is required'),
+    body('newPassword').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+    handleValidationErrors
+  ],
+  async (req, res) => {
+    try {
+      let { email, newPassword } = req.body;
+      email = email.toLowerCase().trim();
+
+      // Find user by email
+      const user = await User.findOne({ email });
+      if (!user) {
+        return res.status(404).json({ success: false, message: 'User with this email not found' });
+      }
+
+      // Update password
+      user.password = newPassword; // Will trigger bcrypt pre-save hook
+      await user.save();
+
+      res.json({
+        success: true,
+        message: 'Password reset successfully. You can now login with your new password.'
+      });
+    } catch (error) {
+      console.error('Password reset error:', error);
+      res.status(500).json({ success: false, message: 'Server error during password reset' });
+    }
+  }
+);
 
 export default router;

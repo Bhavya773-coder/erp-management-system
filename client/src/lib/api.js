@@ -128,6 +128,7 @@ const authAPI = {
   login: (data) => api.post('/auth/login', data),
   getMe: () => api.get('/auth/me'),
   subscribeToPush: (subscription) => api.post('/auth/push-subscription', { subscription }),
+  resetPassword: (data) => api.post('/auth/reset-password', data),
 };
 
 export {

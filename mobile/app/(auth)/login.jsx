@@ -22,7 +22,13 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const { login, isLoading, error, clearError } = useAuthStore();
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const { login, resetPassword, isLoading, error, clearError } = useAuthStore();
   const router = useRouter();
 
   const handleLogin = async () => {
@@ -31,6 +37,36 @@ export default function LoginScreen() {
     const result = await login(email.trim(), password);
     if (result.success) {
       router.replace('/(tabs)/chats');
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!email.trim() || !newPassword.trim() || !confirmPassword.trim()) {
+      useAuthStore.setState({ error: 'All fields are required' });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      useAuthStore.setState({ error: 'Passwords do not match' });
+      return;
+    }
+    clearError();
+    setSuccessMessage('');
+
+    const result = await resetPassword({
+      email: email.trim(),
+      newPassword
+    });
+
+    if (result.success) {
+      setSuccessMessage(result.message || 'Password reset successfully!');
+      setTimeout(() => {
+        setIsForgotPassword(false);
+        setPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+        setSuccessMessage('');
+        clearError();
+      }, 2500);
     }
   };
 
@@ -48,8 +84,12 @@ export default function LoginScreen() {
             <View style={styles.logoCircle}>
               <Image source={logo} style={styles.logoImage} resizeMode="contain" />
             </View>
-            <Text style={styles.appName}>Arcadian Chat</Text>
-            <Text style={styles.tagline}>Enterprise Communication Hub</Text>
+            <Text style={styles.appName}>
+              {isForgotPassword ? 'Reset Password' : 'Arcadian Chat'}
+            </Text>
+            <Text style={styles.tagline}>
+              {isForgotPassword ? 'Securely update your password' : 'Enterprise Communication Hub'}
+            </Text>
           </View>
 
           {/* Form */}
@@ -61,74 +101,193 @@ export default function LoginScreen() {
               </View>
             )}
 
-            <View style={styles.inputWrapper}>
-              <Ionicons
-                name="mail-outline"
-                size={20}
-                color={Colors.textSecondary}
-                style={styles.inputIcon}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Email address"
-                placeholderTextColor={Colors.textMuted}
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-            </View>
+            {successMessage !== '' && (
+              <View style={styles.successBox}>
+                <Ionicons name="checkmark-circle" size={18} color={Colors.success || '#25D366'} />
+                <Text style={styles.successText}>{successMessage}</Text>
+              </View>
+            )}
 
-            <View style={styles.inputWrapper}>
-              <Ionicons
-                name="lock-closed-outline"
-                size={20}
-                color={Colors.textSecondary}
-                style={styles.inputIcon}
-              />
-              <TextInput
-                style={[styles.input, styles.passwordInput]}
-                placeholder="Password"
-                placeholderTextColor={Colors.textMuted}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-              />
-              <TouchableOpacity
-                onPress={() => setShowPassword(!showPassword)}
-                style={styles.eyeButton}
-              >
-                <Ionicons
-                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                  size={20}
-                  color={Colors.textSecondary}
-                />
-              </TouchableOpacity>
-            </View>
+            {isForgotPassword ? (
+              <>
+                <View style={styles.inputWrapper}>
+                  <Ionicons
+                    name="mail-outline"
+                    size={20}
+                    color={Colors.textSecondary}
+                    style={styles.inputIcon}
+                  />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Email address"
+                    placeholderTextColor={Colors.textMuted}
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                </View>
 
-            <TouchableOpacity
-              style={[styles.loginButton, isLoading && styles.disabledButton]}
-              onPress={handleLogin}
-              disabled={isLoading}
-              activeOpacity={0.8}
-            >
-              {isLoading ? (
-                <ActivityIndicator color={Colors.textOnPrimary} />
-              ) : (
-                <Text style={styles.loginButtonText}>Sign In</Text>
-              )}
-            </TouchableOpacity>
+                <View style={styles.inputWrapper}>
+                  <Ionicons
+                    name="lock-closed-outline"
+                    size={20}
+                    color={Colors.textSecondary}
+                    style={styles.inputIcon}
+                  />
+                  <TextInput
+                    style={[styles.input, styles.passwordInput]}
+                    placeholder="New password"
+                    placeholderTextColor={Colors.textMuted}
+                    value={newPassword}
+                    onChangeText={setNewPassword}
+                    secureTextEntry={!showNewPassword}
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowNewPassword(!showNewPassword)}
+                    style={styles.eyeButton}
+                  >
+                    <Ionicons
+                      name={showNewPassword ? 'eye-off-outline' : 'eye-outline'}
+                      size={20}
+                      color={Colors.textSecondary}
+                    />
+                  </TouchableOpacity>
+                </View>
 
-            <TouchableOpacity
-              style={styles.signupLink}
-              onPress={() => router.push('/(auth)/signup')}
-            >
-              <Text style={styles.signupLinkText}>
-                Don't have an account?{' '}
-                <Text style={styles.signupLinkBold}>Sign Up</Text>
-              </Text>
-            </TouchableOpacity>
+                <View style={styles.inputWrapper}>
+                  <Ionicons
+                    name="lock-closed-outline"
+                    size={20}
+                    color={Colors.textSecondary}
+                    style={styles.inputIcon}
+                  />
+                  <TextInput
+                    style={[styles.input, styles.passwordInput]}
+                    placeholder="Confirm new password"
+                    placeholderTextColor={Colors.textMuted}
+                    value={confirmPassword}
+                    onChangeText={setConfirmPassword}
+                    secureTextEntry={!showConfirmPassword}
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                    style={styles.eyeButton}
+                  >
+                    <Ionicons
+                      name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'}
+                      size={20}
+                      color={Colors.textSecondary}
+                    />
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.loginButton, isLoading && styles.disabledButton]}
+                  onPress={handleResetPassword}
+                  disabled={isLoading}
+                  activeOpacity={0.8}
+                >
+                  {isLoading ? (
+                    <ActivityIndicator color={Colors.textOnPrimary} />
+                  ) : (
+                    <Text style={styles.loginButtonText}>Reset Password</Text>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.signupLink}
+                  onPress={() => {
+                    setIsForgotPassword(false);
+                    clearError();
+                  }}
+                >
+                  <Text style={styles.signupLinkBold}>Back to Sign In</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <View style={styles.inputWrapper}>
+                  <Ionicons
+                    name="mail-outline"
+                    size={20}
+                    color={Colors.textSecondary}
+                    style={styles.inputIcon}
+                  />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Email address"
+                    placeholderTextColor={Colors.textMuted}
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                </View>
+
+                <View style={styles.inputWrapper}>
+                  <Ionicons
+                    name="lock-closed-outline"
+                    size={20}
+                    color={Colors.textSecondary}
+                    style={styles.inputIcon}
+                  />
+                  <TextInput
+                    style={[styles.input, styles.passwordInput]}
+                    placeholder="Password"
+                    placeholderTextColor={Colors.textMuted}
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry={!showPassword}
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowPassword(!showPassword)}
+                    style={styles.eyeButton}
+                  >
+                    <Ionicons
+                      name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                      size={20}
+                      color={Colors.textSecondary}
+                    />
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.forgotPasswordWrapper}
+                  onPress={() => {
+                    setIsForgotPassword(true);
+                    clearError();
+                  }}
+                >
+                  <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.loginButton, isLoading && styles.disabledButton]}
+                  onPress={handleLogin}
+                  disabled={isLoading}
+                  activeOpacity={0.8}
+                >
+                  {isLoading ? (
+                    <ActivityIndicator color={Colors.textOnPrimary} />
+                  ) : (
+                    <Text style={styles.loginButtonText}>Sign In</Text>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.signupLink}
+                  onPress={() => router.push('/(auth)/signup')}
+                >
+                  <Text style={styles.signupLinkText}>
+                    Don't have an account?{' '}
+                    <Text style={styles.signupLinkBold}>Sign Up</Text>
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -256,5 +415,32 @@ const styles = StyleSheet.create({
   signupLinkBold: {
     color: Colors.accent,
     fontWeight: '700',
+  },
+  forgotPasswordWrapper: {
+    alignSelf: 'flex-end',
+    marginBottom: Spacing.lg,
+    marginTop: -Spacing.xs,
+  },
+  forgotPasswordText: {
+    color: Colors.accent,
+    fontSize: Fonts.sizes.sm,
+    fontWeight: '600',
+  },
+  successBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(37,211,102,0.1)',
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    marginBottom: Spacing.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(37,211,102,0.3)',
+  },
+  successText: {
+    color: Colors.success || '#25D366',
+    marginLeft: Spacing.sm,
+    fontSize: Fonts.sizes.sm,
+    flex: 1,
+    fontWeight: '600',
   },
 });

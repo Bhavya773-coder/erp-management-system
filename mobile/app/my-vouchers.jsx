@@ -11,6 +11,7 @@ import { messageAPI } from '../lib/api';
 import { format, parseISO, startOfMonth, endOfMonth, isSameMonth } from 'date-fns';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import { API_BASE_URL } from '@/constants/config';
 
 const { width } = Dimensions.get('window');
 
@@ -21,6 +22,9 @@ export default function MyVouchersScreen() {
   const [loading, setLoading] = useState(true);
   const [expandedMonth, setExpandedMonth] = useState(format(new Date(), 'MMMM yyyy'));
   const [selectedVoucher, setSelectedVoucher] = useState(null);
+  
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedVouchers, setSelectedVouchers] = useState([]);
 
   useEffect(() => {
     fetchVouchers();
@@ -52,6 +56,113 @@ export default function MyVouchersScreen() {
   const monthKeys = useMemo(() => Object.keys(groupedVouchers).sort((a, b) => {
     return new Date(b) - new Date(a);
   }), [groupedVouchers]);
+
+  const handlePrintGroup = async () => {
+    if (selectedVouchers.length !== 4) {
+      Alert.alert('Selection Error', 'Please select exactly 4 vouchers to print them together.');
+      return;
+    }
+
+    const COMPANY_NAMES = {
+      'MP': 'Millennium Plaza',
+      'AST': 'Arcadia Shipping and Trading',
+      'AE': 'Arcadia Engineering',
+      'APIL': 'Arvind Port and infra'
+    };
+
+    const generateVoucherHTML = (v) => {
+      const vData = v.voucherData || {};
+      const fullCompanyName = COMPANY_NAMES[vData.company] || vData.company || 'ARCADIAN WORKS';
+      const narration = vData.narration || v.content || 'No description.';
+      return `
+        <div style="flex: 1; border: 2px solid #ddd; border-radius: 8px; padding: 15px; margin-bottom: 10px; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box;">
+          <div style="display: flex; justify-content: space-between; border-bottom: 2px solid #25D366; padding-bottom: 5px; margin-bottom: 10px;">
+             <div style="font-weight: bold; color: #128C7E;">${fullCompanyName}</div>
+             <div style="color: #666; font-size: 14px;">VOUCHER #${vData.number || 'N/A'}</div>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 5px;">
+             <div><span style="font-weight:bold;">Date:</span> ${format(parseISO(v.createdAt), 'dd MMM yyyy, HH:mm')}</div>
+             <div><span style="font-weight:bold;">Prepared By:</span> ${vData.preparedBy || 'Self'}</div>
+             <div><span style="font-weight:bold;">Status:</span> ${vData.status || 'PENDING'}</div>
+          </div>
+          <div style="font-size: 24px; font-weight: 800; color: #25D366; text-align: center; margin: 10px 0;">
+             ₹${vData.amount?.toLocaleString('en-IN') || 0}
+          </div>
+          <div style="font-size: 12px; color: #444; font-style: italic;">
+             <span style="font-weight:bold;">Description:</span> ${narration}
+          </div>
+        </div>
+      `;
+    };
+
+    const generateSupportingsHTML = (v) => {
+      const vData = v.voucherData || {};
+      const imagesStr = vData.supportingImages || v.fileUrl;
+      const images = imagesStr ? imagesStr.split(',') : [];
+      
+      let imagesHtml = '<div style="font-size: 12px; color: #999; margin: auto;">No supportings attached.</div>';
+      if (images.length > 0) {
+        imagesHtml = images.slice(0, 4).map(url => {
+          const baseUrl = API_BASE_URL.replace('/api', '');
+          const fullUrl = url.startsWith('http') ? url : `${baseUrl}${url.startsWith('/') ? '' : '/'}${url}`;
+          return `<img src="${fullUrl}" style="height: 100%; width: 23%; object-fit: cover; border-radius: 4px; border: 1px solid #ccc; margin-right: 2%;" />`;
+        }).join('');
+      }
+
+      return `
+        <div style="flex: 1; border: 1px solid #ddd; border-radius: 8px; padding: 10px; margin-bottom: 10px; box-sizing: border-box; display: flex; flex-direction: column;">
+          <div style="font-weight: bold; font-size: 14px; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-bottom: 10px;">
+            VOUCHER #${vData.number || 'N/A'} - Supportings
+          </div>
+          <div style="flex: 1; display: flex; flex-direction: row; align-items: center; overflow: hidden;">
+            ${imagesHtml}
+          </div>
+        </div>
+      `;
+    };
+
+    const html = `
+      <html>
+        <head>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
+          <style>
+            body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; margin: 0; padding: 0; color: #333; }
+            .page { height: 100vh; width: 100vw; padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; page-break-after: always; }
+          </style>
+        </head>
+        <body>
+          <!-- Page 1: Vouchers -->
+          <div class="page">
+            <h3 style="text-align: center; margin-top: 0; margin-bottom: 10px;">OFFICIAL PAYMENT VOUCHERS</h3>
+            <div style="flex: 1; display: flex; flex-direction: column; justify-content: space-between;">
+              ${selectedVouchers.map(v => generateVoucherHTML(v)).join('')}
+            </div>
+          </div>
+          <!-- Page 2: Supportings -->
+          <div class="page" style="page-break-after: auto;">
+            <h3 style="text-align: center; margin-top: 0; margin-bottom: 10px;">VOUCHER SUPPORTINGS</h3>
+            <div style="flex: 1; display: flex; flex-direction: column; justify-content: space-between;">
+              ${selectedVouchers.map(v => generateSupportingsHTML(v)).join('')}
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    try {
+      if (Platform.OS === 'ios') {
+        await Print.printAsync({ html });
+      } else {
+        const { uri } = await Print.printToFileAsync({ html });
+        await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+      }
+      setSelectionMode(false);
+      setSelectedVouchers([]);
+    } catch (err) {
+      console.error('Print error:', err);
+      Alert.alert('Error', 'Could not generate print document');
+    }
+  };
 
   const handlePrint = async (v) => {
     const vData = v.voucherData || {};
@@ -174,10 +285,27 @@ export default function MyVouchersScreen() {
   return (
     <SafeAreaView style={[s.container, { backgroundColor: Colors.bgPrimary }]}>
       <View style={[s.header, { backgroundColor: Colors.bgHeader, borderBottomColor: Colors.border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
-          <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
+        <TouchableOpacity 
+          onPress={() => {
+            if (selectionMode) {
+              setSelectionMode(false);
+              setSelectedVouchers([]);
+            } else {
+              router.back();
+            }
+          }} 
+          style={s.backBtn}
+        >
+          <Ionicons name={selectionMode ? "close" : "arrow-back"} size={24} color={Colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={[s.title, { color: Colors.textPrimary }]}>My Vouchers</Text>
+        <Text style={[s.title, { color: Colors.textPrimary }]}>
+          {selectionMode ? `${selectedVouchers.length}/4 Selected` : 'My Vouchers'}
+        </Text>
+        {!selectionMode && vouchers.length > 0 && (
+          <TouchableOpacity onPress={() => setSelectionMode(true)} style={{ marginLeft: 'auto', padding: Spacing.xs }}>
+            <Text style={{ color: Colors.accent, fontWeight: '700', fontSize: 16 }}>Select</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {loading ? (
@@ -212,14 +340,42 @@ export default function MyVouchersScreen() {
 
                 {expandedMonth === month && (
                   <View style={s.voucherList}>
-                    {groupedVouchers[month].map(v => (
+                    {groupedVouchers[month].map(v => {
+                      const isSelected = selectedVouchers.some(sv => (sv._id || sv.id) === (v._id || v.id));
+                      return (
                       <TouchableOpacity 
                         key={v._id || v.id} 
-                        style={[s.voucherItem, { backgroundColor: Colors.bgSecondary, borderBottomColor: Colors.border }]}
-                        onPress={() => setSelectedVoucher(v)}
+                        style={[
+                          s.voucherItem, 
+                          { backgroundColor: isSelected ? Colors.accent + '15' : Colors.bgSecondary, borderBottomColor: Colors.border },
+                          isSelected && { borderColor: Colors.accent, borderWidth: 1 }
+                        ]}
+                        onPress={() => {
+                          if (selectionMode) {
+                            if (isSelected) {
+                              setSelectedVouchers(prev => prev.filter(sv => (sv._id || sv.id) !== (v._id || v.id)));
+                            } else if (selectedVouchers.length < 4) {
+                              setSelectedVouchers(prev => [...prev, v]);
+                            } else {
+                              Alert.alert('Limit Reached', 'You can only group 4 vouchers for printing.');
+                            }
+                          } else {
+                            setSelectedVoucher(v);
+                          }
+                        }}
+                        onLongPress={() => {
+                          if (!selectionMode) {
+                            setSelectionMode(true);
+                            setSelectedVouchers([v]);
+                          }
+                        }}
                       >
                         <View style={[s.voucherIcon, { backgroundColor: Colors.accent + '20' }]}>
-                          <Ionicons name="receipt" size={20} color={Colors.accent} />
+                          {selectionMode && isSelected ? (
+                            <Ionicons name="checkmark-circle" size={24} color={Colors.accent} />
+                          ) : (
+                            <Ionicons name="receipt" size={20} color={Colors.accent} />
+                          )}
                         </View>
                         <View style={s.voucherInfo}>
                           <Text style={[s.voucherNum, { color: Colors.textPrimary }]}>{v.voucherData?.number}</Text>
@@ -230,7 +386,8 @@ export default function MyVouchersScreen() {
                           <View style={[s.statusDot, { backgroundColor: v.voucherData?.status === 'APPROVED' ? '#4CAF50' : v.voucherData?.status === 'DENIED' ? '#F44336' : '#FF9800' }]} />
                         </View>
                       </TouchableOpacity>
-                    ))}
+                      );
+                    })}
                     <View style={[s.monthTotal, { borderTopColor: Colors.border }]}>
                       <Text style={[s.totalLabel, { color: Colors.textSecondary }]}>Monthly Total</Text>
                       <Text style={[s.totalValue, { color: Colors.accent }]}>
@@ -249,6 +406,20 @@ export default function MyVouchersScreen() {
         <View style={s.overlay}>
           <TouchableOpacity style={s.dismiss} onPress={() => setSelectedVoucher(null)} />
           {renderVoucherDetail(selectedVoucher)}
+        </View>
+      )}
+
+      {selectionMode && (
+        <View style={s.bottomBar}>
+          <Text style={s.bottomBarText}>{selectedVouchers.length} / 4 Selected</Text>
+          <TouchableOpacity 
+            style={[s.bottomBarBtn, selectedVouchers.length !== 4 && { opacity: 0.5 }]} 
+            onPress={handlePrintGroup}
+            disabled={selectedVouchers.length !== 4}
+          >
+            <Ionicons name="print" size={20} color="#FFF" />
+            <Text style={s.bottomBarBtnText}>Print Group</Text>
+          </TouchableOpacity>
         </View>
       )}
     </SafeAreaView>
@@ -294,5 +465,9 @@ const s = StyleSheet.create({
   amountLabel: { fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
   amountValue: { fontSize: 36, fontWeight: '900' },
   printBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 16, borderRadius: BorderRadius.lg, marginTop: 8 },
-  printBtnText: { color: '#FFF', fontSize: 16, fontWeight: '700' }
+  printBtnText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+  bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#FFF', padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderColor: '#eee', elevation: 10, shadowColor: '#000', shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.1, shadowRadius: 5 },
+  bottomBarText: { fontSize: 16, fontWeight: '700', color: '#333' },
+  bottomBarBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#25D366', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8, gap: 8 },
+  bottomBarBtnText: { color: '#FFF', fontSize: 16, fontWeight: '700' }
 });
